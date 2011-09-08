@@ -60,14 +60,12 @@ streamEmu syscalls = do
 
 compat (SysReq n _) (SysReq n' _) = n == n' --Woefully insufficient, but sanity
 passthrough (Syscall (SysReq SafeMMap _) _) = True
+passthrough (Syscall (SysReq MUnmap _) _) = True
 passthrough (Syscall (SysReq Brk _) _) = True
 passthrough (Syscall (SysReq SetArchPrCtl _) _) = True
 passthrough (Syscall (SysReq Write _) _) = True
 --Totally not OK stuff
-passthrough (Syscall (SysReq MUnmap _) _) = True
-passthrough (Syscall (SysReq FStat _) _) = True
 passthrough (Syscall (SysReq Open _) _) = True
-passthrough (Syscall (SysReq Close _) _) = True
 passthrough (Syscall (SysReq MMap _) _) = True
 {-
 passthrough (Syscall (SysReq GetDEnts _) _) = False
