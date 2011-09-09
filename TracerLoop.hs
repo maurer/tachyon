@@ -14,26 +14,27 @@ makeLogger syscalls = do
   req <- newIORef undefined
   return $ \e -> case e of
                    PreSyscall  -> do sysIn  <- readInput
-                                     liftIO $ writeIORef req sysIn
+                                     case sysIn of
+                                       (SysReq ExitGroup _) -> liftIO $
+                                         atomically $ writeTChan syscalls $
+                                           Syscall sysIn (SysRes 0 [])
+                                       _ -> liftIO $ writeIORef req sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readIORef req
                                      sys    <- readOutput sysIn
                                      liftIO $ atomically $ writeTChan
                                        syscalls $ sys
-                   Signal 11 -> killTrace
                    Signal x -> do liftIO $ print x
                                   return ()
                    Exit _ -> return ()
-
-killTrace = undefined --TODO make this actually terminate the trace
 
 streamEmu :: TChan Syscall -> IO (Event -> Trace ())
 streamEmu syscalls = do
   req <- newIORef undefined
   return $ \e -> case e of
                    PreSyscall -> do
+                     sysIn <- readInput
                      sys@(Syscall i o) <- liftIO $ atomically $ readTChan
                                               syscalls
-                     sysIn <- readInput
                      if not $ compat i sysIn
                        then liftIO $ atomically $ unGetTChan syscalls sys
                        else return ()
@@ -52,16 +53,17 @@ streamEmu syscalls = do
                    PostSyscall -> do
                      (sys@(Syscall _ o), sysIn) <- liftIO $ readIORef req
                      if not $ passthrough sys then writeOutput sysIn o else return ()
-                     --debug "Postops completed"
-               --    Signal 11 -> killTrace
                    Signal x -> do liftIO $ print x
                                   return ()
                    Exit _ -> return ()
 
 compat (SysReq n _) (SysReq n' _) = n == n' --Woefully insufficient, but sanity
+--OK
 passthrough (Syscall (SysReq SafeMMap _) _) = True
 passthrough (Syscall (SysReq MUnmap _) _) = True
 passthrough (Syscall (SysReq Brk _) _) = True
+passthrough (Syscall (SysReq ExitGroup _) _) = True
+--Maybe not OK
 passthrough (Syscall (SysReq SetArchPrCtl _) _) = True
 passthrough (Syscall (SysReq Write _) _) = True
 --Totally not OK stuff
