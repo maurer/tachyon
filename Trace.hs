@@ -11,6 +11,8 @@ import Data.Binary
 import TracerLoop
 import Control.Exception
 import Foreign.Ptr
+import System.Process
+import Control.Monad.IO.Class
 
 import Syscall
 
@@ -27,4 +29,5 @@ trace handler (exe, args) = do
 
 wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral
 
-uglyGetEntry _ = return $ wordTrace 0x402980
+uglyGetEntry str = liftIO $ do
+  fmap (wordTrace . read) $ readProcess "/bin/bash" ["-c", "readelf -h " ++ str ++ " | grep Entry | awk '{print $4}'"] ""
