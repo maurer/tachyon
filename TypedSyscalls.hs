@@ -9,6 +9,7 @@ import Control.Monad.IO.Class
 import Control.Monad
 import Foreign.Ptr
 import Foreign.Storable
+import Data.Bits
 import qualified Data.ByteString as BS
 
 callConv :: [Regs -> Word64]
@@ -48,7 +49,7 @@ writeRes ret (SmallVal addr) (StorageReccomend _) (Just bs) =
   if (addr == 0)
     then writeRes ret (SmallVal ret) (Storage undefined) (Just bs)
     else writeRes ret (SmallVal addr) (Storage undefined) (Just bs)
-writeRes _ (SmallVal addr) (Storage _) (Just bs) =
+writeRes _ (SmallVal addr) _ (Just bs) =
   writeByteString bs (wordTrace addr)
 writeRes _ _ _ _ = return ()
 
@@ -57,7 +58,10 @@ readRes ret args arg ty = case ty of
   Small -> return Nothing
   SmallSize -> return Nothing
   Storage sz -> let SmallVal p = arg
-                in fmap Just $ readByteString (wordTrace p) (size args sz)
+                in do sz' <- size args sz
+                      fmap Just $ readByteString (wordTrace p) sz'
+  MaybeStorage sz -> let SmallVal p = arg
+                     in if (p == 0) then return Nothing else readRes ret args arg (Storage sz)
   StorageReccomend sz -> if arg == SmallVal 0
                            then readRes ret args (SmallVal ret) (Storage sz)
                            else readRes ret args arg (Storage sz)
@@ -65,9 +69,9 @@ readRes ret args arg ty = case ty of
   InputNull _ -> return Nothing
   RawPtr -> return Nothing
   String -> return Nothing
-  where size _ (ConstSize n) = n
-        size args (Arg n) = let SmallVal v = args !! n in fromIntegral v
-          
+  where size _ (ConstSize n) = return $ n
+        size args (Arg n) = let SmallVal v = args !! n in return $ fromIntegral v
+        size args (ArgMan n) = let SmallVal v = args !! n in fmap (.&. 0xFFFFFFFF) $ tracePeek $ rawTracePtr $ wordPtrToPtr $ fromIntegral v
 
 
 readArg :: [Word64] -> Word64 -> ArgType -> Trace SysReqArg
@@ -76,8 +80,11 @@ readArg args arg ty = case ty of
   SmallSize -> return $ SmallVal arg
   Storage _ -> return $ SmallVal arg
   StorageReccomend _ -> return $ SmallVal arg
-  Input sz -> fmap Buf $ readByteString (wordTrace arg) (size args sz)
-  InputNull sz -> fmap Buf $ traceReadNullTerm (wordTrace arg) (size args sz)
+  MaybeStorage _ -> return $ SmallVal arg
+  Input sz -> do sz' <- size args sz
+                 fmap Buf $ readByteString (wordTrace arg) sz'
+  InputNull sz -> do sz' <- size args sz
+                     fmap Buf $ traceReadNullTerm (wordTrace arg) sz'
   RawPtr -> return $ SmallVal arg
   String -> fmap Buf $ traceReadNullTerm (wordTrace arg) 4096
   Strings -> do p <- tracePeek (wordTrace arg)
@@ -86,8 +93,9 @@ readArg args arg ty = case ty of
                    else do Buf v  <- readArg args p String
                            Bufs vs <- readArg args (arg + 8) Strings
                            return $ Bufs $ v : vs
-  where size _ (ConstSize n) = n
-        size args (Arg n) = fromIntegral $ (args !! n)
+  where size _ (ConstSize n) = return $ n
+        size args (Arg n) = return $ fromIntegral $ (args !! n)
+        size args (ArgMan n) = fmap (.&. 0xFFFFFFFF) $ tracePeek $ rawTracePtr $ wordPtrToPtr $ fromIntegral $ (args !! n)
 
 wordTrace :: Word64 -> TracePtr a
 wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral

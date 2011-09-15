@@ -20,9 +20,11 @@ data SysSig = SysSig [ArgType]
 
 data Size = ConstSize Int -- ^ A size which is always the same
           | Arg Int       -- ^ A size which is determined
+          | ArgMan Int    -- ^ A managed size
 
 data ArgType = Small
           | Storage Size -- ^ A pointer to some storage that can be written
+          | MaybeStorage Size -- ^ Like storage, but if null, ignore it
           | StorageReccomend Size -- ^ Like storage, but if null, look to the return value for the value of this pointer
           | Input Size   -- ^ A pointer to an input buffer
           | SmallSize -- ^ Like a small, but identity not checked on comparison
@@ -68,6 +70,13 @@ data SyscallID = Read
                | SchedGetScheduler
                | SchedSetScheduler
                | ClockGetTime
+               | Time
+               | GetPeerName
+               | Socket
+               | Connect
+               | GetCWD
+               | GetSockOpt
+               | CapGet
                 deriving (Ord, Show, Eq, Read, Enum)
 
 syscallReg = orig_rax
@@ -92,14 +101,20 @@ syscallID regs = case syscallReg regs of
    13  -> RTSigAction
    14  -> RTSigProcMask
    16  -> IOCtl
-   20  -> GetPID
    21  -> Access
+   39  -> GetPID
+   41  -> Socket
+   42  -> Connect
+   52  -> GetPeerName
+   55  -> GetSockOpt
    59  -> ExecVE
    63  -> UName
    72  -> FCntl
    78  -> GetDEnts
+   79  -> GetCWD
    96  -> GetTimeOfDay
    97  -> GetRLimit
+   125 -> CapGet
    137 -> StatFS
    142 -> SchedSetParam
    143 -> SchedGetParam
@@ -110,6 +125,7 @@ syscallID regs = case syscallReg regs of
              0x1002 -> SetArchPrCtl
              0x1003 -> GetArchPrCtl
              0x1004 -> GetArchPrCtl
+   201 -> Time
    202 -> Futex
    218 -> SetTIDAddr
    229 -> ClockGetTime
