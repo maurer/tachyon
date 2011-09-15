@@ -39,7 +39,7 @@ streamEmu syscalls = do
                        then liftIO $ atomically $ unGetTChan syscalls sys
                        else return ()
                      liftIO $ writeIORef req (sys, sysIn)
-                {-     sys' <- case i of
+                     sys' <- case i of
                          (SysReq MMap xs) -> do
                            regs <- getRegs
                            setRegs $ regs { orig_rax = 9,
@@ -48,8 +48,8 @@ streamEmu syscalls = do
                                             rdx = 7,
                                             r10 = 34 }
                            return (Syscall (SysReq SafeMMap xs) o)
-                         _ -> return sys -}
-                     if not $ passthrough sys then nopSyscall else return ()
+                         _ -> return sys
+                     if not $ passthrough sys' then nopSyscall else return ()
                    PostSyscall -> do
                      (sys@(Syscall _ o), sysIn) <- liftIO $ readIORef req
                      if not $ passthrough sys then writeOutput sysIn o else return ()
@@ -64,9 +64,6 @@ passthrough (Syscall (SysReq ExitGroup _) _) = True
 --Maybe not OK
 passthrough (Syscall (SysReq SetArchPrCtl _) _) = True
 passthrough (Syscall (SysReq Write _) _) = True
---Totally not OK stuff
-passthrough (Syscall (SysReq Open _) _) = True
-passthrough (Syscall (SysReq MMap _) _) = True
 {-
 passthrough (Syscall (SysReq GetDEnts _) _) = False
 passthrough _ = True
