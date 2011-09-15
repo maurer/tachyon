@@ -53,9 +53,7 @@ streamEmu syscalls = do
                    PostSyscall -> do
                      (sys@(Syscall _ o), sysIn) <- liftIO $ readIORef req
                      if not $ passthrough sys then writeOutput sysIn o else return ()
-                   Signal x -> do liftIO $ print x
-                                  return ()
-                   Exit _ -> return ()
+                   _ -> return ()
 
 compat (SysReq n _) (SysReq n' _) = n == n' --Woefully insufficient, but sanity
 --OK
