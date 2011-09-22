@@ -19,8 +19,10 @@ readInput :: Trace SysReq
 readInput = do
   regs <- getRegs
   let sid =  syscallID regs
+  liftIO $ print sid
   let sigs = getSig sid
   let args = map ($ regs) callConv
+  liftIO $ print args
   fmap (SysReq sid) $ zipWithM (readArg args) args sigs
 
 getSig :: SyscallID -> [ArgType]
@@ -70,6 +72,7 @@ readRes ret args arg ty = case ty of
   RawPtr -> return Nothing
   String -> return Nothing
   where size _ (ConstSize n) = return $ n
+        size args (Count k n) = let SmallVal v = args !! n in return $ k * (fromIntegral (v .&. 0xFFFFFFFF))
         size args (Arg n) = let SmallVal v = args !! n in return $ fromIntegral v
         size args (ArgMan n) = let SmallVal v = args !! n in fmap (.&. 0xFFFFFFFF) $ tracePeek $ rawTracePtr $ wordPtrToPtr $ fromIntegral v
 
@@ -95,6 +98,7 @@ readArg args arg ty = case ty of
                            return $ Bufs $ v : vs
   where size _ (ConstSize n) = return $ n
         size args (Arg n) = return $ fromIntegral $ (args !! n)
+        size args (Count k n) = return $ k * (fromIntegral $ (args !! n) .&. 0xFFFFFFFF)
         size args (ArgMan n) = fmap (.&. 0xFFFFFFFF) $ tracePeek $ rawTracePtr $ wordPtrToPtr $ fromIntegral $ (args !! n)
 
 wordTrace :: Word64 -> TracePtr a

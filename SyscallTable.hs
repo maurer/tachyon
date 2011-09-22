@@ -5,10 +5,28 @@ import Syscall
 import qualified Data.Map as Map
 
 syscallTable :: Map.Map SyscallID SysSig
-syscallTable = Map.fromList [(ExecVE, SysSig [String, Strings, Strings]),
+syscallTable = Map.fromList [(GetEUID, SysSig []),
+                             (FTruncate, SysSig [Small, Small]),
+                             (Dup2, SysSig [Small, Small]),
+                             (UMask, SysSig [Small]),
+                             (GetUID, SysSig []),
+                             (SetUID, SysSig [Small]),
+                             (SetGID, SysSig [Small]),
+                             (GetEGID, SysSig []),
+                             (SetRLimit, SysSig [Small, Input (ConstSize 10)]),
+                             (ExecVE, SysSig [String, Strings, Strings]),
+                             (Bind, SysSig [Small, Input (Arg 2), Small]),
+                             (RecvMsg, SysSig [Small, Storage (ConstSize 56), Small]),
+--TODO check poll more carefully
+                             (Poll, SysSig [Input (Count 56 1), Small, RawPtr, RawPtr]), 
+                             (RecvFrom, SysSig [Small, Storage (Arg 2), Small, Small, Storage (ArgMan 5), Small]),
+                             (GetSockName, SysSig [Small, Storage (ArgMan 2), Small]),
+                             (SendTo, SysSig [Small, Input (Arg 2), Small, Small]),
                              (Brk, SysSig [RawPtr]), --TODO special (we want this to actually get passed through)
 --                             (Open, SysSig [String, Small, Small]),
                              (Open, SysSig [String, Small]),
+                             (SetResUID, SysSig [Small, Small, Small]),
+                             (SetResGID, SysSig [Small, Small, Small]),
                              (GetPID, SysSig []),
                              (UName, SysSig [Storage (ConstSize 390)]),
                              (GetArchPrCtl, SysSig [Small, Storage (ConstSize 8)]), -- TODO 8 is the size of an unsigned long, right?

@@ -14,6 +14,7 @@ makeLogger syscalls = do
   req <- newIORef undefined
   return $ \e -> case e of
                    PreSyscall  -> do sysIn  <- readInput
+                                     liftIO $ print sysIn
                                      case sysIn of
                                        (SysReq ExitGroup _) -> liftIO $
                                          atomically $ writeTChan syscalls $

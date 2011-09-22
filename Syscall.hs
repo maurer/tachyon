@@ -21,6 +21,7 @@ data SysSig = SysSig [ArgType]
 data Size = ConstSize Int -- ^ A size which is always the same
           | Arg Int       -- ^ A size which is determined
           | ArgMan Int    -- ^ A managed size
+          | Count Int Int -- ^ A size and count of objects of that size (arg num)
 
 data ArgType = Small
           | Storage Size -- ^ A pointer to some storage that can be written
@@ -33,7 +34,11 @@ data ArgType = Small
           | Strings
           | RawPtr
 
-data SyscallID = Read
+data SyscallID = Dup2
+               | UMask
+               | SetResUID
+               | SetResGID
+               | Read
                | Write
                | Open
                | Close
@@ -59,6 +64,8 @@ data SyscallID = Read
                | Futex
                | SetRobustList
                | GetRLimit
+               | SetRLimit
+               | Clone
                | StatFS
                | IOCtl
                | SchedGetParam
@@ -77,6 +84,17 @@ data SyscallID = Read
                | GetCWD
                | GetSockOpt
                | CapGet
+               | Bind
+               | GetSockName
+               | SendTo
+               | RecvMsg
+               | RecvFrom
+               | GetEUID
+               | FTruncate
+               | GetUID
+               | SetUID
+               | SetGID
+               | GetEGID
                 deriving (Ord, Show, Eq, Read, Enum)
 
 syscallReg = orig_rax
@@ -102,18 +120,34 @@ syscallID regs = case syscallReg regs of
    14  -> RTSigProcMask
    16  -> IOCtl
    21  -> Access
+   33  -> Dup2
    39  -> GetPID
    41  -> Socket
    42  -> Connect
+   44  -> SendTo
+   45  -> RecvFrom
+   47  -> RecvMsg
+   49  -> Bind
+   51  -> GetSockName
    52  -> GetPeerName
    55  -> GetSockOpt
+   56  -> Clone
    59  -> ExecVE
    63  -> UName
    72  -> FCntl
+   77  -> FTruncate
    78  -> GetDEnts
    79  -> GetCWD
+   95  -> UMask
    96  -> GetTimeOfDay
    97  -> GetRLimit
+   102 -> GetUID
+   105 -> SetUID
+   106 -> SetGID
+   107 -> GetEUID
+   108 -> GetEGID
+   117 -> SetResUID
+   119 -> SetResGID
    125 -> CapGet
    137 -> StatFS
    142 -> SchedSetParam
@@ -125,6 +159,7 @@ syscallID regs = case syscallReg regs of
              0x1002 -> SetArchPrCtl
              0x1003 -> GetArchPrCtl
              0x1004 -> GetArchPrCtl
+   160 -> SetRLimit
    201 -> Time
    202 -> Futex
    218 -> SetTIDAddr
