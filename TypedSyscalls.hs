@@ -35,7 +35,8 @@ readOutput :: SysReq -> Trace Syscall
 readOutput req@(SysReq i args) = do
   regs <- getRegs
   let ret = rax regs
-  ress <- zipWithM (readRes ret args) args (getSig (syscallID regs))
+  ress <- zipWithM (readRes ret args) args (getSig i)
+  liftIO $ putStrLn "All arguments read."
   return $ Syscall req (SysRes ret ress)
 
 writeOutput :: SysReq -> SysRes -> Trace ()
@@ -56,7 +57,10 @@ writeRes _ (SmallVal addr) _ (Just bs) =
 writeRes _ _ _ _ = return ()
 
 readRes :: Word64 -> [SysReqArg] -> SysReqArg -> ArgType -> Trace (Maybe BS.ByteString)
-readRes ret args arg ty = case ty of
+readRes ret args arg ty = do
+  liftIO $ putStrLn $ "Reading: " ++ (show ty)
+  readRes' ret args arg ty
+readRes' ret args arg ty = case ty of
   Small -> return Nothing
   SmallSize -> return Nothing
   Storage sz -> let SmallVal p = arg
@@ -65,7 +69,9 @@ readRes ret args arg ty = case ty of
   MaybeStorage sz -> let SmallVal p = arg
                      in if (p == 0) then return Nothing else readRes ret args arg (Storage sz)
   StorageReccomend sz -> if arg == SmallVal 0
-                           then readRes ret args (SmallVal ret) (Storage sz)
+                           then if (ret > maxBound - 1024)
+                                   then return Nothing
+                                   else readRes ret args (SmallVal ret) (Storage sz)
                            else readRes ret args arg (Storage sz)
   Input _ -> return Nothing
   InputNull _ -> return Nothing

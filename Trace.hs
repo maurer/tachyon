@@ -16,14 +16,14 @@ import Control.Monad.IO.Class
 
 import Syscall
 
-trace :: (Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
+trace :: (TPid -> Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
 trace handler (exe, args) = do
   finish <- newEmptyMVar
   forkIO $ (do th <- traceExec exe args
                runTrace th $ do
                  exeEntry <- uglyGetEntry exe
                  setBreak exeEntry
-                 traceEvent (== Breakpoint)
+                 traceEvent (\_ -> (== Breakpoint))
                  traceWithHandler handler) `finally` (putMVar finish ())
   return finish
 

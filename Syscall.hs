@@ -22,6 +22,7 @@ data Size = ConstSize Int -- ^ A size which is always the same
           | Arg Int       -- ^ A size which is determined
           | ArgMan Int    -- ^ A managed size
           | Count Int Int -- ^ A size and count of objects of that size (arg num)
+           deriving Show
 
 data ArgType = Small
           | Storage Size -- ^ A pointer to some storage that can be written
@@ -32,7 +33,7 @@ data ArgType = Small
           | InputNull Size
           | String
           | Strings
-          | RawPtr
+          | RawPtr deriving Show
 
 data SyscallID = Dup2
                | UMask
@@ -64,8 +65,10 @@ data SyscallID = Dup2
                | Futex
                | SetRobustList
                | GetRLimit
+               | GetRUsage
                | SetRLimit
                | Clone
+               | Unlink
                | StatFS
                | IOCtl
                | SchedGetParam
@@ -90,9 +93,11 @@ data SyscallID = Dup2
                | RecvMsg
                | RecvFrom
                | GetEUID
+               | Select
                | FTruncate
                | GetUID
                | SetUID
+               | Pipe
                | SetGID
                | GetEGID
                 deriving (Ord, Show, Eq, Read, Enum)
@@ -120,6 +125,8 @@ syscallID regs = case syscallReg regs of
    14  -> RTSigProcMask
    16  -> IOCtl
    21  -> Access
+   22  -> Pipe
+   23  -> Select
    33  -> Dup2
    39  -> GetPID
    41  -> Socket
@@ -138,9 +145,11 @@ syscallID regs = case syscallReg regs of
    77  -> FTruncate
    78  -> GetDEnts
    79  -> GetCWD
+   87  -> Unlink
    95  -> UMask
    96  -> GetTimeOfDay
    97  -> GetRLimit
+   98  -> GetRUsage
    102 -> GetUID
    105 -> SetUID
    106 -> SetGID

@@ -6,12 +6,18 @@ import qualified Data.Map as Map
 
 syscallTable :: Map.Map SyscallID SysSig
 syscallTable = Map.fromList [(GetEUID, SysSig []),
+-- Clone is special, we handle an event for its result
+                             (Clone, SysSig [Small, Small]),
                              (FTruncate, SysSig [Small, Small]),
                              (Dup2, SysSig [Small, Small]),
                              (UMask, SysSig [Small]),
                              (GetUID, SysSig []),
                              (SetUID, SysSig [Small]),
                              (SetGID, SysSig [Small]),
+                             (Pipe, SysSig[Input (ConstSize 8)]), --TODO not passthrough, but some kind of emulation...
+ --TODO do select right
+                       --      (Select, SysSig[Small, Input (ConstSize 80), Input (ConstSize 80), Input (ConstSize 80), Input (ConstSize 10)]), --TODO probably also a passthrough
+                             (Select, SysSig[]),
                              (GetEGID, SysSig []),
                              (SetRLimit, SysSig [Small, Input (ConstSize 10)]),
                              (ExecVE, SysSig [String, Strings, Strings]),
@@ -61,6 +67,8 @@ syscallTable = Map.fromList [(GetEUID, SysSig []),
 --                             (RTSigAction, SysSig [Small, Input (Arg 3), Storage (Arg 3), Small]), --TODO better equivalency
                              (RTSigProcMask, SysSig []), --TODO real signature
                              (GetRLimit, SysSig []),--TODO real signature
+                             (GetRUsage, SysSig []), --TODO real signature
+                             (Unlink, SysSig [InputNull (ConstSize 1024), Small]),
                              (StatFS, SysSig [String, Storage (ConstSize 120)]),
                              (IOCtl, SysSig [Small, Small, Storage (ConstSize 60)]), --TODO real signature
                              (FCntl, SysSig [Small, Small]), --TODO real signature
