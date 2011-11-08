@@ -5,7 +5,9 @@ import Syscall
 import qualified Data.Map as Map
 
 syscallTable :: Map.Map SyscallID SysSig
-syscallTable = Map.fromList [(GetEUID, SysSig []),
+syscallTable = Map.fromList []
+{-
+(GetEUID, SysSig []),
 -- Clone is special, we handle an event for its result
                              (Clone, SysSig [Small, Small]),
                              (FTruncate, SysSig [Small, Small]),
@@ -83,4 +85,4 @@ syscallTable = Map.fromList [(GetEUID, SysSig []),
                              (SchedGetScheduler, SysSig [Small]),
                              (SchedSetScheduler, SysSig [Small, Small, Input (ConstSize 4)]),
                              (ClockGetTime, SysSig [Small, Storage (ConstSize 16)])
-                             ]
+-}

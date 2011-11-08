@@ -34,10 +34,10 @@ makeLogger syscalls = do
                                        _ -> liftIO $ writeTLS tpid sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
                                      liftIO $ putStrLn $ "Attempting to read for " ++ (show sysIn)
-                                     sys    <- readOutput sysIn
+                                     sys    <- readOutput
                                      liftIO $ putStrLn $ "Success."
                                      liftIO $ atomically $ writeTChan
-                                       syscalls $ (tpid, sys)
+                                       syscalls $ (tpid, Syscall sysIn sys)
                    Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
                                   return ()
                    Exit _ -> liftIO $ putStrLn $ "ThreadExit: " ++ (show tpid)
@@ -118,9 +118,9 @@ streamEmu syscalls = do
                    PostSyscall -> do
                      t <- liftIO $ decodeThread tpid
                      (sys@(Syscall i o), sysIn) <- liftIO $ readTLS t
-                     if not $ passthrough i then writeOutput sysIn o else return ()
+                     if not $ passthrough i then writeOutput o else return ()
                      case i of
-                       (SysReq Clone _) -> writeOutput sysIn o
+                       (SysReq Clone _) -> writeOutput o
                        _ -> return ()
                    _ -> return ()
 

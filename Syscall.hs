@@ -7,35 +7,21 @@ import Data.Binary
 import Data.Word
 import qualified Data.ByteString as BS
 
-data SysReq = SysReq SyscallID [SysReqArg] deriving Show
-data SysRes = SysRes Word64 [Maybe BS.ByteString] deriving Show
+data SysReq = SysReq SyscallID [(Lookup, Datum)] deriving Show
+data SysRes = SysRes Word64 [(Lookup, Datum)] deriving Show
 
 data Syscall = Syscall SysReq SysRes deriving Show
 
-data SysReqArg = SmallVal Word64
-               | Buf BS.ByteString
-               | Bufs [BS.ByteString] deriving (Show, Eq)
+data SysSig = SysSig Type [Type] deriving Show
 
-data SysSig = SysSig [ArgType]
-
-data Size = ConstSize Int -- ^ A size which is always the same
-          | Arg Int       -- ^ A size which is determined
-          | ArgMan Int    -- ^ A managed size
-          | Count Int Int -- ^ A size and count of objects of that size (arg num)
-           deriving Show
-
-data ArgType = Small
-          | Storage Size -- ^ A pointer to some storage that can be written
-          | InOut Size
-          | MaybeStorage Size -- ^ Like storage, but if null, ignore it
-          | StorageReccomend Size -- ^ Like storage, but if null, look to the return value for the value of this pointer
-          | Input Size   -- ^ A pointer to an input buffer
-          | SmallSize -- ^ Like a small, but identity not checked on comparison
-          | InputNull Size
-          | String
-          | Strings
-          | MsgHdr
-          | RawPtr deriving Show
+data Datum = SmallDatum Word64 | Buf BS.ByteString deriving Show
+data IOC = In | Out | InOut deriving Show
+data NT = NT | UT deriving Show
+data Lookup = Arg Int | Index Int Lookup | Self | Undo Lookup deriving Show
+data Bound = Unbounded | Const Int | Mult Bound Int | Lookup Lookup deriving Show
+data Type = Small Int
+          | Struct [Type]
+          | Ptr IOC Type Bound NT deriving Show
 
 data SyscallID = Dup2
                | MAdvise
@@ -230,19 +216,35 @@ nullUnbox x = BS.concat $ map unHelp x
       where unHelp (Rep n v) = BS.replicate n v
             unHelp (Lit s) = s
 
-instance Binary SysReqArg where
+instance Binary Datum where
    put (Buf x) = do put (0 :: Word8)
                     put x
-   put (Bufs x) = do put (1 :: Word8)
-                     put x
-   put (SmallVal n) = do put (2 :: Word8)
-                         put n
+   put (SmallDatum n) = do put (1 :: Word8)
+                           put n
    get = do (c :: Word8) <- get
             case c of
                0 -> do x <- get
                        return $ Buf x
                1 -> do x <- get
-                       return $ Bufs x
-               2 -> do x <- get
-                       return $ SmallVal x
+                       return $ SmallDatum x
+
+
+instance Binary Lookup where
+  put (Arg n) = do put (0 :: Word8)
+                   put n
+  put (Index n l) = do put (1 :: Word8)
+                       put n
+                       put l
+  put Self        = put (2 :: Word8)
+  put (Undo l)    = do put (3 :: Word8)
+                       put l
+  get = do (c :: Word8) <- get
+           case c of
+             0 -> do n <- get
+                     return $ Arg n
+             1 -> do n <- get
+                     l <- get
+                     return $ Index n l
+             2 -> return Self
+             3 -> fmap Undo get
 type NullString = [NullHelp]
