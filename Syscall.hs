@@ -26,6 +26,7 @@ data Size = ConstSize Int -- ^ A size which is always the same
 
 data ArgType = Small
           | Storage Size -- ^ A pointer to some storage that can be written
+          | InOut Size
           | MaybeStorage Size -- ^ Like storage, but if null, ignore it
           | StorageReccomend Size -- ^ Like storage, but if null, look to the return value for the value of this pointer
           | Input Size   -- ^ A pointer to an input buffer
@@ -33,9 +34,11 @@ data ArgType = Small
           | InputNull Size
           | String
           | Strings
+          | MsgHdr
           | RawPtr deriving Show
 
 data SyscallID = Dup2
+               | MAdvise
                | UMask
                | SetResUID
                | SetResGID
@@ -83,6 +86,7 @@ data SyscallID = Dup2
                | Time
                | GetPeerName
                | Socket
+               | SetSockOpt
                | Connect
                | GetCWD
                | GetSockOpt
@@ -93,6 +97,7 @@ data SyscallID = Dup2
                | RecvMsg
                | RecvFrom
                | GetEUID
+               | ExitSys
                | Select
                | FTruncate
                | GetUID
@@ -100,6 +105,8 @@ data SyscallID = Dup2
                | Pipe
                | SetGID
                | GetEGID
+               | Times
+               | WriteV
                 deriving (Ord, Show, Eq, Read, Enum)
 
 syscallReg = orig_rax
@@ -124,9 +131,11 @@ syscallID regs = case syscallReg regs of
    13  -> RTSigAction
    14  -> RTSigProcMask
    16  -> IOCtl
+   20  -> WriteV
    21  -> Access
    22  -> Pipe
    23  -> Select
+   28  -> MAdvise
    33  -> Dup2
    39  -> GetPID
    41  -> Socket
@@ -137,9 +146,11 @@ syscallID regs = case syscallReg regs of
    49  -> Bind
    51  -> GetSockName
    52  -> GetPeerName
+   54  -> SetSockOpt
    55  -> GetSockOpt
    56  -> Clone
    59  -> ExecVE
+   60  -> ExitSys
    63  -> UName
    72  -> FCntl
    77  -> FTruncate
@@ -150,6 +161,7 @@ syscallID regs = case syscallReg regs of
    96  -> GetTimeOfDay
    97  -> GetRLimit
    98  -> GetRUsage
+   100 -> Times
    102 -> GetUID
    105 -> SetUID
    106 -> SetGID
@@ -172,7 +184,7 @@ syscallID regs = case syscallReg regs of
    201 -> Time
    202 -> Futex
    218 -> SetTIDAddr
-   229 -> ClockGetTime
+   228 -> ClockGetTime
    231 -> ExitGroup
    273 -> SetRobustList
    n   -> error $ "Unknown syscall: " ++ (show n)

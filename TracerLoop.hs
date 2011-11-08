@@ -9,6 +9,7 @@ import Control.Concurrent.STM
 import Util
 import Data.Int
 import qualified Data.Map as Map
+import System.Exit
 
 makeLogger :: TChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
 makeLogger syscalls = do
@@ -19,9 +20,7 @@ makeLogger syscalls = do
            Just z  -> writeIORef z v
            Nothing -> do z <- newIORef v
                          writeIORef tls (Map.insert t z tls')
-  let readTLS t = do putStrLn "readTLS"
-                     v <- fmap (Map.! t) $ readIORef tls
-                     putStrLn "mid"
+  let readTLS t = do v <- fmap (Map.! t) $ readIORef tls
                      readIORef v
   return $ \tpid e ->
              case e of
@@ -39,11 +38,16 @@ makeLogger syscalls = do
                                      liftIO $ putStrLn $ "Success."
                                      liftIO $ atomically $ writeTChan
                                        syscalls $ (tpid, sys)
-                   Signal x -> do liftIO $ print x
+                   Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
                                   return ()
-                   Exit _ -> return ()
+                   Exit _ -> liftIO $ putStrLn $ "ThreadExit: " ++ (show tpid)
                    Split tp -> do sysIn <- liftIO $ readTLS tpid
                                   liftIO $ writeTLS tp sysIn
+                                --  contextSwitch tp
+                                --  stepCurrent
+                                  --contextSwitch tpid
+
+ignoreit _ _ = return ()
 
 streamEmu :: TChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
 streamEmu syscalls = do
@@ -55,27 +59,19 @@ streamEmu syscalls = do
            Just z  -> writeIORef z v
            Nothing -> do z <- newIORef v
                          writeIORef tls (Map.insert t z tls')
-  let readTLS t = do putStrLn "readTLS"
-                     tls' <- readIORef tls
-                     print (Map.keys tls', t)
+  let readTLS t = do tls' <- readIORef tls
                      let v = tls' Map.! t
                      readIORef v
   let registerThread t t' = do
-         putStrLn $ "Registering thread " ++ (show t) ++ " as " ++ (show t')
          (ttt', ttz') <- readIORef ttt
          writeIORef ttt $ (Map.insert t t' ttt', Map.insert t' t ttz')
   let decodeThread t = do
-         putStrLn $ "Attempting to decode thread " ++ (show t)
          (ttt', _) <- readIORef ttt
-         print ttt'
-         print (ttt' Map.! t)
          return (ttt' Map.! t)
   let encodeThread t = do
-         putStrLn $ "Attempting to encode thread " ++ (show t)
          (_, ttt') <- readIORef ttt
          return (ttt' Map.! t)
   z@(t0,_) <- atomically $ readTChan syscalls
-  print "Hear"
   atomically $ unGetTChan syscalls z
   let emptyReg t t' = do
         (ttt', _) <- readIORef ttt
@@ -94,6 +90,9 @@ streamEmu syscalls = do
                      ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readTChan
                                               syscalls
                      sys' <- case sysIn of
+                         (SysReq WriteV _) -> do
+                            traceWithHandler ignoreit
+                            error "boom"
                          (SysReq MMap xs) -> do
                            regs <- getRegs
                            setRegs $ regs { orig_rax = 9,
@@ -104,15 +103,18 @@ streamEmu syscalls = do
                            return (SysReq SafeMMap xs)
                          _ -> return sysIn
                      if not $ passthrough sys' then nopSyscall else return ()
-                     liftIO $ writeTLS t (sys, sysIn)
+                     liftIO $ writeTLS t (sys, sys')
+                     liftIO $ print sys'
                      if t == t' --Our current thread is the executing thread
                         then if not $ compat i sysIn
                                then do liftIO $ print (i, sysIn)
-                                       error "Replace me with clean death" syscalls sys
+                                       liftIO $ exitWith ExitSuccess
+                                       --error "Replace me with clean death" syscalls sys
                                else return ()
                         else do tz' <- liftIO $ encodeThread t'
                                 liftIO $ atomically $ unGetTChan syscalls ce
-                                contextSwitch tz'
+                                sleep
+                                wakeUp tz'
                    PostSyscall -> do
                      t <- liftIO $ decodeThread tpid
                      (sys@(Syscall i o), sysIn) <- liftIO $ readTLS t
@@ -133,12 +135,14 @@ passthrough (SysReq ExitGroup _) = True
 passthrough (SysReq Clone _) = True
 --Maybe not OK
 passthrough (SysReq SetArchPrCtl _) = True
-passthrough (SysReq Write _) = True
+--passthrough (SysReq Write _) = True
+--Not OK
+--passthrough (SysReq MMap _) = True
+--passthrough (SysReq Open _) = True
+--passthrough _ = True
 {-
 passthrough (Syscall (SysReq GetDEnts _) _) = False
 passthrough _ = True
-
-
 -}
 passthrough _ = False
 

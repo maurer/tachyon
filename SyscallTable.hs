@@ -14,7 +14,9 @@ syscallTable = Map.fromList [(GetEUID, SysSig []),
                              (GetUID, SysSig []),
                              (SetUID, SysSig [Small]),
                              (SetGID, SysSig [Small]),
-                             (Pipe, SysSig[Input (ConstSize 8)]), --TODO not passthrough, but some kind of emulation...
+                             (SetSockOpt, SysSig []), --TODO
+                             (Times, SysSig[Storage (ConstSize 32)]),
+                             (Pipe, SysSig[InOut (ConstSize 8)]), --TODO not passthrough, but some kind of emulation...
  --TODO do select right
                        --      (Select, SysSig[Small, Input (ConstSize 80), Input (ConstSize 80), Input (ConstSize 80), Input (ConstSize 10)]), --TODO probably also a passthrough
                              (Select, SysSig[]),
@@ -50,13 +52,17 @@ syscallTable = Map.fromList [(GetEUID, SysSig []),
                              (GetSockOpt, SysSig [Small, Small, Small, Storage (ArgMan 4), Small]),
                              (CapGet, SysSig [Small, Small]),
                              (MMap, SysSig [StorageReccomend (Arg 1), Small, Small, Small, Small, Small]),
+                             --(MMap, SysSig[]),
+                             (MAdvise, SysSig []), --TODO
+                             (ExitSys, SysSig[Small]),
                              (SafeMMap, SysSig [StorageReccomend (Arg 1), Small, Small, Small, Small, Small]),
                              (MUnmap, SysSig [RawPtr, Small]),
                              (Stat, SysSig [String, Storage (ConstSize 144)]),
+                             (WriteV, SysSig []),
                              (FStat, SysSig [Small, Storage (ConstSize 144)]),
                              (Close, SysSig [Small]),
                              (Read, SysSig [Small, Storage (Arg 2), Small]),
-                             (Write, SysSig [Small, InputNull (Arg 2), SmallSize]),
+                             (Write, SysSig [Small, Input (Arg 2), SmallSize]),
                              (MProtect, SysSig [RawPtr, Small, Small]),
                              (SetTIDAddr, SysSig [RawPtr]),
                              (GetDEnts, SysSig [Small, Storage (Arg 2), Small]),
