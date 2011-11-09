@@ -41,7 +41,7 @@ raw = rawTracePtr . wordPtrToPtr . fromIntegral
 
 getWord :: Word64 -> Int -> Trace Word64
 getWord p n = fmap (mask n) $ tracePeek $ raw p
-  where mask n n' = n' .&. (foldl setBit 0 [0..((n * 8) - 1)])
+  where mask n n' = n' .&. (foldl setBit 0 [0..(max (wordSize * 8) ((n * 8) - 1))])
 
 readBound :: [Word64] -> [Type] -> Bound -> Lookup -> Trace Int
 readBound args tys bound self =
@@ -75,27 +75,56 @@ size (Small n)     = n
 size (Struct tys)  = sum $ map size tys
 size (Ptr _ _ _ _) = wordSize
 
-readArg :: [Word64] -> [Type] -> Lookup -> Word64 -> Type -> Trace [(Lookup, Datum)]
-readArg args tys look arg ty = do
+input In    = True
+input InOut = True
+input Out   = False
+
+readArg = readRec input input
+
+readRec :: (IOC -> Bool) -> (IOC -> Bool) -> [Word64] -> [Type] -> Lookup -> Word64 -> Type -> Trace [(Lookup, Datum)]
+readRec recurse record args tys look arg ty = do
   case ty of
     Small n -> assert (n <= wordSize) $ do
       return [(look, SmallDatum arg)]
-    Ptr Out _ _ _ -> return []
-    Ptr _ ty' bound NT -> assert ((size ty') <= wordSize) $ assert (nonStruct ty') $ do
-      b <- readBound args tys bound look
-      ntHelp ty' b 0
-  where ntHelp ty' b i = do
+    --This case is meant to catch all direct struct pointers. If they're in arrays of some sort, they'll fall through
+    --and recurse back to here later after some checks and such.
+    Ptr ioc (Struct stys) (Const 1) UT -> fmap concat $ zipWithM (sHelp ioc) stys $ offs stys
+    p@(Ptr ioc ty' bound t) -> let r = case ty' of
+                                         Small _ -> record ioc
+                                         _ -> True in
+                               if (recurse ioc) && r
+                                  then assert ((size ty') <= wordSize) $ do
+                                         b <- readBound args tys bound look
+                                         tHelp p b 0
+                                  else return []
+  where tHelp p@(Ptr ioc ty' _ t) b i = do
           let sz = size ty'
-          w <- getWord (arg + fromIntegral (i * sz)) sz
-          if w == 0
+          let addr = arg + fromIntegral (i * sz)
+          w <- getWord addr sz
+          if (w == 0) && (t == NT)
              then return [(Index i look, SmallDatum 0)]
              else do rest <- if i < b
-                                then ntHelp ty' b (i + 1)
+                                then tHelp p b (i + 1)
                                 else return []
-                     this <- readArg args tys (Index i look) w ty'
+                     let (tty, targ) = case ty' of
+                                         Struct _ -> (Ptr ioc ty' (Const 1) UT, addr)
+                                         _        -> (ty', w)
+                     this <- readRec recurse record args tys (Index i look) targ ty'
                      return $ this ++ rest
+        offs stys = offs' (0, 0) stys
+        offs' n@(i,k) (sty:stys) = n : (offs' (i + 1, k + (fromIntegral $ size sty)) stys)
+        sHelp ioc ty (i, off) =
+          case ty of
+            Small n -> if record ioc
+                          then do w <- getWord (arg + off) n
+                                  readRec recurse record args tys (Index i look) w ty
+                          else return []
+            Ptr _ _ _ _ -> if recurse ioc
+                              then do w <- getWord (arg + off) wordSize
+                                      readRec recurse record args tys (Index i look) w ty
+                              else return []
+            Struct _ -> error "Nested structs disallowed"
 
-         
 --  where outAssert ty' bound nt x = assert (finalLevel ty') $ assert (bound /= Unbounded) $ assert (nt /= NT) $ x
         
 
