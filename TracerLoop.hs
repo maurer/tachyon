@@ -20,7 +20,9 @@ makeLogger syscalls = do
            Just z  -> writeIORef z v
            Nothing -> do z <- newIORef v
                          writeIORef tls (Map.insert t z tls')
-  let readTLS t = do v <- fmap (Map.! t) $ readIORef tls
+  let readTLS t = do putStrLn "PreTLSRead"
+                     v <- fmap (Map.! t) $ readIORef tls
+                     putStrLn "PostTLSRead"
                      readIORef v
   return $ \tpid e ->
              case e of
@@ -43,9 +45,6 @@ makeLogger syscalls = do
                    Exit _ -> liftIO $ putStrLn $ "ThreadExit: " ++ (show tpid)
                    Split tp -> do sysIn <- liftIO $ readTLS tpid
                                   liftIO $ writeTLS tp sysIn
-                                --  contextSwitch tp
-                                --  stepCurrent
-                                  --contextSwitch tpid
 
 ignoreit _ _ = return ()
 
