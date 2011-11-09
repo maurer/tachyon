@@ -20,14 +20,11 @@ makeLogger syscalls = do
            Just z  -> writeIORef z v
            Nothing -> do z <- newIORef v
                          writeIORef tls (Map.insert t z tls')
-  let readTLS t = do putStrLn "PreTLSRead"
-                     v <- fmap (Map.! t) $ readIORef tls
-                     putStrLn "PostTLSRead"
+  let readTLS t = do v <- fmap (Map.! t) $ readIORef tls
                      readIORef v
   return $ \tpid e ->
              case e of
                    PreSyscall  -> do sysIn <- readInput
-                                     liftIO $ print sysIn
                                      case sysIn of
                                        (SysReq ExitGroup _) -> liftIO $
                                          atomically $ writeTChan syscalls $
@@ -35,9 +32,7 @@ makeLogger syscalls = do
                                        
                                        _ -> liftIO $ writeTLS tpid sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
-                                     liftIO $ putStrLn $ "Attempting to read for " ++ (show sysIn)
                                      sys    <- readOutput
-                                     liftIO $ putStrLn $ "Success."
                                      liftIO $ atomically $ writeTChan
                                        syscalls $ (tpid, Syscall sysIn sys)
                    Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
@@ -103,7 +98,6 @@ streamEmu syscalls = do
                          _ -> return sysIn
                      if not $ passthrough sys' then nopSyscall else return ()
                      liftIO $ writeTLS t (sys, sys')
-                     liftIO $ print sys'
                      if t == t' --Our current thread is the executing thread
                         then if not $ compat i sysIn
                                then do liftIO $ print (i, sysIn)

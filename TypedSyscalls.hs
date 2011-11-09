@@ -19,12 +19,10 @@ callConv = [rdi, rsi, rdx, r10, r8, r9]
 setup :: Trace ([Word64], [Type], Word64, Type, SyscallID)
 setup = do
   regs <- getRegs
-  liftIO $ print regs
   let sid = syscallID regs
   let SysSig rsig sigs = getSig sid
   let args = map ($ regs) callConv
   let r = (args, sigs, rax regs, rsig, sid)
-  liftIO $ putStrLn $ "Setup: " ++ (show r)
   return r
 
 zipWithM3 f x y z = sequence $ zipWith3 f x y z
@@ -48,9 +46,7 @@ getWord p n = fmap (mask n) $ tracePeek $ raw p
 
 readBound :: [Word64] -> [Type] -> Bound -> Lookup -> Trace Int
 readBound args tys bound self = do
-  liftIO $ putStrLn $ "Bound being acquired from " ++ (show bound)
   b <- readBound' args tys bound self
-  liftIO $ putStrLn $ "Bound of " ++ (show b) ++ " read."
   return b
 readBound' args tys bound self =
   case bound of
@@ -62,7 +58,6 @@ readBound' args tys bound self =
 readLookup :: [Word64] -> [Type] -> Lookup -> Lookup -> Trace (Word64, Type)
 readLookup args tys l s = do
   r <- readLookup' args tys l s
-  liftIO $ putStrLn $ "Looked up " ++ (show r) ++ " for " ++ (show l)
   return r
 readLookup' args tys l s =
   case l of
@@ -158,7 +153,6 @@ readOutput :: Trace SysRes
 readOutput = do
   (args, sigs, ret, rsig, _) <- setup
   ress <- fmap concat $ zipWithM3 (readRes (args ++ [ret]) (sigs ++ [rsig])) (map Arg [0..]) (args ++ [ret]) (sigs ++ [rsig])
-  liftIO $ putStrLn "All arguments read."
   return $ SysRes ret ress
 
 inout _ = True
