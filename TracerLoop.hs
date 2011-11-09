@@ -33,6 +33,7 @@ makeLogger syscalls = do
                                        _ -> liftIO $ writeTLS tpid sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
                                      sys    <- readOutput
+                                     --liftIO $ print (sysIn, sys)
                                      liftIO $ atomically $ writeTChan
                                        syscalls $ (tpid, Syscall sysIn sys)
                    Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
@@ -74,13 +75,14 @@ streamEmu syscalls = do
                    Split newtid -> do --Assume that a clone is being
                                       --processed
                      t <- liftIO $ decodeThread tpid
-                     z@((Syscall _ (SysRes x _)), _) <- liftIO $ readTLS t
+                     z@((Syscall _ (SysRes x _)), _, _) <- liftIO $ readTLS t
                      liftIO $ registerThread newtid (buildTPid x)
                      liftIO $ writeTLS (buildTPid x) z
                    PreSyscall -> do
                      liftIO $ emptyReg tpid t0
                      sysIn <- readInput
                      t <- liftIO $ decodeThread tpid
+                     regs <- getRegs
                      ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readTChan
                                               syscalls
                      sys' <- case sysIn of
@@ -88,7 +90,6 @@ streamEmu syscalls = do
                             traceWithHandler ignoreit
                             error "boom"
                          (SysReq MMap xs) -> do
-                           regs <- getRegs
                            setRegs $ regs { orig_rax = 9,
                                             rdi = 0,
                                             r8 = bitCast $ (-1 :: Int32),
@@ -97,7 +98,7 @@ streamEmu syscalls = do
                            return (SysReq SafeMMap xs)
                          _ -> return sysIn
                      if not $ passthrough sys' then nopSyscall else return ()
-                     liftIO $ writeTLS t (sys, sys')
+                     liftIO $ writeTLS t (sys, sys', orig_rax regs)
                      if t == t' --Our current thread is the executing thread
                         then if not $ compat i sysIn
                                then do liftIO $ print (i, sysIn)
@@ -110,7 +111,9 @@ streamEmu syscalls = do
                                 wakeUp tz'
                    PostSyscall -> do
                      t <- liftIO $ decodeThread tpid
-                     (sys@(Syscall i o), sysIn) <- liftIO $ readTLS t
+                     (sys@(Syscall i o), sysIn, orax) <- liftIO $ readTLS t
+                     regs <- getRegs
+                     setRegs $ regs {orig_rax = orax}
                      if not $ passthrough i then writeOutput o else return ()
                      case i of
                        (SysReq Clone _) -> writeOutput o

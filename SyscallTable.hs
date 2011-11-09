@@ -82,10 +82,14 @@ robustListHead = Struct [rawPtr, long, rawPtr] --TODO set it up to walk the list
 iovec m = Struct [Ptr m void (Lookup (Index 1 (Undo Self))) UT,
                   size]
 
+oppose In = Out
+oppose Out = In
+oppose InOut = InOut
+
 msghdr m = Struct [Ptr m void (Lookup (Index 1 (Undo Self))) UT,
                    socklen,
                    Small 4, -- padding
-                   Ptr m (iovec m) (Lookup (Index 4 (Undo Self))) UT,
+                   Ptr (oppose m) (iovec m) (Lookup (Index 4 (Undo Self))) UT,
                    size,
                    Ptr m void (Lookup (Index 6 (Undo Self))) UT,
                    size,
@@ -115,11 +119,12 @@ syscallTable = Map.fromList [(Pipe, SysSig int [Ptr Out int (Const 2) UT, int]),
                              (MProtect, SysSig int [rawPtr, size, int]),
                              (Clone, SysSig int []), -- This is special, as we deal with clone by monitoring the new process/thread
                              (SetRobustList, SysSig long [ptr In robustListHead, size]),
-                             (Futex, SysSig int [ptr InOut int, int, int, ptr Out timespec, ptr InOut int, int]), --TODO modalize this syscall
+                             (Futex, SysSig int []),
+                             --(Futex, SysSig int [ptr InOut int, int, int, ptr Out timespec, ptr InOut int, int]), --TODO modalize this syscall
                              (Bind, SysSig int [int, Ptr In void (Lookup (Arg 2)) UT, socklen]),
                              (GetSockName, SysSig int [int, Ptr Out void (Lookup (Index 0 (Arg 2))) UT, ptr Out socklen]),
                              (SendTo, SysSig ssize [int, Ptr In void (Lookup (Arg 2)) UT, size, int, Ptr In void (Lookup (Arg 5)) UT, socklen]),
-                             (RecvMsg, SysSig ssize [int, ptr Out $ msghdr Out, int]),
+                             (RecvMsg, SysSig ssize [int, ptr InOut $ msghdr Out, int]),
                              (Connect, SysSig int [int, Ptr In void (Lookup (Arg 2)) UT, socklen]),
                              (MUnmap, SysSig int [rawPtr, size]),
                              (Stat, SysSig int [path, ptr Out stat]),
