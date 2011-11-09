@@ -137,12 +137,17 @@ getSig sid =
 readOutput :: Trace SysRes
 readOutput = do
   (args, sigs, ret, rsig, _) <- setup
-  ress <- fmap concat $ zipWithM (readRes ret args sigs) (args ++ [ret]) (sigs ++ [rsig])
+  ress <- fmap concat $ zipWithM3 (readRes (args ++ [ret]) (sigs ++ [rsig])) (map Arg [0..]) (args ++ [ret]) (sigs ++ [rsig])
   liftIO $ putStrLn "All arguments read."
   return $ SysRes ret ress
 
-readRes :: Word64 -> [Word64] -> [Type] -> Word64 -> Type -> Trace [(Lookup, Datum)]
-readRes = undefined
+inout _ = True
+output Out = True
+output InOut = True
+output _ = False
+
+readRes :: [Word64] -> [Type] -> Lookup -> Word64 -> Type -> Trace [(Lookup, Datum)]
+readRes = readRec inout output
 
 writeOutput :: SysRes -> Trace ()
 writeOutput (SysRes r ress) = do
