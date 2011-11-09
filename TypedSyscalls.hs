@@ -19,10 +19,13 @@ callConv = [rdi, rsi, rdx, r10, r8, r9]
 setup :: Trace ([Word64], [Type], Word64, Type, SyscallID)
 setup = do
   regs <- getRegs
+  liftIO $ print regs
   let sid = syscallID regs
   let SysSig rsig sigs = getSig sid
   let args = map ($ regs) callConv
-  return (args, sigs, rax regs, rsig, sid)
+  let r = (args, sigs, rax regs, rsig, sid)
+  liftIO $ putStrLn $ "Setup: " ++ (show r)
+  return r
 
 zipWithM3 f x y z = sequence $ zipWith3 f x y z
 
@@ -41,19 +44,27 @@ raw = rawTracePtr . wordPtrToPtr . fromIntegral
 
 getWord :: Word64 -> Int -> Trace Word64
 getWord p n = fmap (mask n) $ tracePeek $ raw p
-  where mask n n' = n' .&. (foldl setBit 0 [0..(max (wordSize * 8) ((n * 8) - 1))])
+  where mask n n' = n' .&. (foldl setBit 0 [0..(min ((wordSize * 8) - 1) ((n * 8) - 1))])
 
 readBound :: [Word64] -> [Type] -> Bound -> Lookup -> Trace Int
-readBound args tys bound self =
+readBound args tys bound self = do
+  liftIO $ putStrLn $ "Bound being acquired from " ++ (show bound)
+  b <- readBound' args tys bound self
+  liftIO $ putStrLn $ "Bound of " ++ (show b) ++ " read."
+  return b
+readBound' args tys bound self =
   case bound of
-    Unbounded     -> return maxBound
     Const n       -> return n
-    Mult bound' m -> do b <- readBound args tys bound' self
+    Mult bound' m -> do b <- readBound' args tys bound' self
                         return $ m * b
     Lookup l      -> fmap (fromIntegral . fst) $ readLookup args tys l self
 
 readLookup :: [Word64] -> [Type] -> Lookup -> Lookup -> Trace (Word64, Type)
-readLookup args tys l s =
+readLookup args tys l s = do
+  r <- readLookup' args tys l s
+  liftIO $ putStrLn $ "Looked up " ++ (show r) ++ " for " ++ (show l)
+  return r
+readLookup' args tys l s =
   case l of
     Arg n      -> assert (n < length args) $ return (args !! n, tys !! n)
     Index n l' -> do (v, t) <- readLookup args tys l' s
@@ -62,6 +73,7 @@ readLookup args tys l s =
                        Ptr _ ty b nt -> indexer (v  + fromIntegral ((size ty) * n)) ty
                        _ -> error $ "Unable to index into a " ++ (show t)
     Undo (Index _ l') -> readLookup args tys l' s
+    Undo Self -> readLookup args tys (Undo s) s
     Undo l' -> error $ "Attempted to undo " ++ (show l')
     Self -> readLookup args tys s s
    where indexer v' ty =
@@ -86,6 +98,14 @@ readRec recurse record args tys look arg ty = do
   case ty of
     Small n -> assert (n <= wordSize) $ do
       return [(look, SmallDatum arg)]
+    --Don't bother figuring anything out if we have a null pointer
+    Ptr _ _ _ _ | arg == 0 -> return []
+    --This is an optimization case to deal with huge buffers
+    Ptr ioc ty'@(Small n) bound nt | record ioc -> do b <- fmap (n *) $ readBound args tys bound look
+                                                      buf <- case nt of
+                                                               UT -> readByteString (raw arg) b
+                                                               NT -> traceReadNullTerm (raw arg) b
+                                                      return [(look, Buf buf)]
     --This case is meant to catch all direct struct pointers. If they're in arrays of some sort, they'll fall through
     --and recurse back to here later after some checks and such.
     Ptr ioc (Struct stys) (Const 1) UT -> fmap concat $ zipWithM (sHelp ioc) stys $ offs stys
@@ -109,7 +129,7 @@ readRec recurse record args tys look arg ty = do
                      let (tty, targ) = case ty' of
                                          Struct _ -> (Ptr ioc ty' (Const 1) UT, addr)
                                          _        -> (ty', w)
-                     this <- readRec recurse record args tys (Index i look) targ ty'
+                     this <- readRec recurse record args tys (Index i look) targ tty
                      return $ this ++ rest
         offs stys = offs' (0, 0) stys
         offs' n@(i,k) (sty:stys) = n : (offs' (i + 1, k + (fromIntegral $ size sty)) stys)
@@ -117,11 +137,11 @@ readRec recurse record args tys look arg ty = do
           case ty of
             Small n -> if record ioc
                           then do w <- getWord (arg + off) n
-                                  readRec recurse record args tys (Index i look) w ty
+                                  readRec recurse record args tys (Index i (Index 0 look)) w ty
                           else return []
             Ptr _ _ _ _ -> if recurse ioc
                               then do w <- getWord (arg + off) wordSize
-                                      readRec recurse record args tys (Index i look) w ty
+                                      readRec recurse record args tys (Index i (Index 0 look)) w ty
                               else return []
             Struct _ -> error "Nested structs disallowed"
 

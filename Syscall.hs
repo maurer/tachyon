@@ -18,7 +18,7 @@ data Datum = SmallDatum Word64 | Buf BS.ByteString deriving Show
 data IOC = In | Out | InOut deriving Show
 data NT = NT | UT deriving (Show, Eq)
 data Lookup = Arg Int | Index Int Lookup | Self | Undo Lookup deriving Show
-data Bound = Unbounded | Const Int | Mult Bound Int | Lookup Lookup deriving Show
+data Bound = Const Int | Mult Bound Int | Lookup Lookup deriving Show
 data Type = Small Int
           | Struct [Type]
           | Ptr IOC Type Bound NT deriving Show
