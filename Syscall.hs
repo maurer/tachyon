@@ -7,23 +7,24 @@ import Data.Binary
 import Data.Word
 import qualified Data.ByteString as BS
 
-data SysReq = SysReq SyscallID [(Lookup, Datum)] deriving Show
+data SysReq = SysReq SyscallID [(Lookup, Datum)] deriving (Show, Eq)
 data SysRes = SysRes Word64 [(Lookup, Datum)] deriving Show
 
 data Syscall = Syscall SysReq SysRes deriving Show
 
 data SysSig = SysSig Type [Type] deriving Show
 
-data Datum = SmallDatum Word64 | Buf BS.ByteString deriving Show
+data Datum = SmallDatum Word64 | Buf BS.ByteString deriving (Show, Eq)
 data IOC = In | Out | InOut deriving Show
 data NT = NT | UT deriving (Show, Eq)
-data Lookup = Arg Int | Index Int Lookup | Self | Undo Lookup deriving Show
+data Lookup = Arg Int | Index Int Lookup | Self | Undo Lookup deriving (Show, Eq)
 data Bound = Const Int | Mult Bound Int | Lookup Lookup deriving Show
 data Type = Small Int
           | Struct [Type]
           | Ptr IOC Type Bound NT deriving Show
 
 data SyscallID = Dup2
+               | SocketPair
                | MAdvise
                | UMask
                | SetResUID
@@ -60,6 +61,9 @@ data SyscallID = Dup2
                | Unlink
                | StatFS
                | IOCtl
+               | UTime
+               | SetITimer
+               | GetITimer
                | SchedGetParam
                | SchedSetParam
                | FCntl
@@ -86,6 +90,8 @@ data SyscallID = Dup2
                | ExitSys
                | Select
                | FTruncate
+               | EPollCreate
+               | EPollCtl
                | GetUID
                | SetUID
                | Pipe
@@ -93,6 +99,21 @@ data SyscallID = Dup2
                | GetEGID
                | Times
                | WriteV
+               | MkDir
+               | EPollWait
+               | TGKill
+               | Listen
+               | SetSID
+               | ChDir
+               | GetGID
+               | SetGroups
+               | Wait4
+               | Accept
+               | ReadV
+               | NanoSleep
+               | SendFile
+               | Shutdown
+               | FAdvise64
                 deriving (Ord, Show, Eq, Read, Enum)
 
 syscallReg = orig_rax
@@ -117,45 +138,61 @@ syscallID regs = case syscallReg regs of
    13  -> RTSigAction
    14  -> RTSigProcMask
    16  -> IOCtl
+   19  -> ReadV
    20  -> WriteV
    21  -> Access
    22  -> Pipe
    23  -> Select
    28  -> MAdvise
    33  -> Dup2
+   35  -> NanoSleep
+   36  -> GetITimer
+   38  -> SetITimer
    39  -> GetPID
+   40  -> SendFile
    41  -> Socket
    42  -> Connect
+   43  -> Accept
    44  -> SendTo
    45  -> RecvFrom
    47  -> RecvMsg
+   48  -> Shutdown
    49  -> Bind
+   50  -> Listen
    51  -> GetSockName
    52  -> GetPeerName
+   53  -> SocketPair
    54  -> SetSockOpt
    55  -> GetSockOpt
    56  -> Clone
    59  -> ExecVE
    60  -> ExitSys
+   61  -> Wait4
    63  -> UName
    72  -> FCntl
    77  -> FTruncate
    78  -> GetDEnts
    79  -> GetCWD
+   80  -> ChDir
    87  -> Unlink
+   83  -> MkDir
    95  -> UMask
    96  -> GetTimeOfDay
    97  -> GetRLimit
    98  -> GetRUsage
    100 -> Times
    102 -> GetUID
+   104 -> GetGID
    105 -> SetUID
    106 -> SetGID
    107 -> GetEUID
    108 -> GetEGID
+   112 -> SetSID
+   116 -> SetGroups
    117 -> SetResUID
    119 -> SetResGID
    125 -> CapGet
+   132 -> UTime
    137 -> StatFS
    142 -> SchedSetParam
    143 -> SchedGetParam
@@ -169,9 +206,14 @@ syscallID regs = case syscallReg regs of
    160 -> SetRLimit
    201 -> Time
    202 -> Futex
+   213 -> EPollCreate
    218 -> SetTIDAddr
+   221 -> FAdvise64
    228 -> ClockGetTime
    231 -> ExitGroup
+   232 -> EPollWait
+   233 -> EPollCtl
+   234 -> TGKill
    273 -> SetRobustList
    n   -> error $ "Unknown syscall: " ++ (show n)
 

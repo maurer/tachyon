@@ -11,3 +11,4 @@ Executable tracer
   Main-is: tracer.hs
   Build-depends: base, binary, trace, containers, bytestring, unix, split, transformers, stm, process
   Extensions: ScopedTypeVariables
+--  GHC-options: -auto-all -rtsopts

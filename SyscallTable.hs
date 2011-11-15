@@ -10,7 +10,8 @@ long = slong
 slong = Small 8
 char = Small 1
 void = Small 1
-path = Ptr In char (Const 4096) NT
+string = Ptr In char (Const 4096) NT
+path = string
 mode = u32
 time = slong
 ulong = long
@@ -53,6 +54,7 @@ blkcnt = Small 8
 stat = Struct [dev,
                ino,
                mode,
+               u32, --pad
                nlink,
                uid,
                gid,
@@ -89,37 +91,81 @@ oppose InOut = InOut
 msghdr m = Struct [Ptr m void (Lookup (Index 1 (Undo Self))) UT,
                    socklen,
                    Small 4, -- padding
-                   Ptr (oppose m) (iovec m) (Lookup (Index 4 (Undo Self))) UT,
+                   Ptr In (iovec m) (Lookup (Index 4 (Undo Self))) UT,
                    size,
                    Ptr m void (Lookup (Index 6 (Undo Self))) UT,
                    size,
                    int]
 nfds = Small 8
 short = Small 2
+itimer = flatten $ Struct [timeVal, timeVal]
 pollfd = Struct [int, short, short]
+sigaction = flatten $ Struct [rawPtr,
+                              rawPtr,
+                              sigset,
+                              int,
+                              rawPtr]
+sigset = Struct $ replicate 16 $ Small 8
+argv = Ptr In string (Const 256) NT
+rLimit = Struct [rlim, rlim]
+rlim = Small 8
+utimbuf = Struct [time, time]
+uint32 = Small 4
+epollData = Small 8
+epollEvent = Struct [uint32, epollData]
+pid = Small 4
 syscallTable :: Map.Map SyscallID SysSig
-syscallTable = Map.fromList [(Pipe, SysSig int [Ptr Out int (Const 2) UT, int]),
+syscallTable = Map.fromList [(EPollWait, SysSig int [int, Ptr Out epollEvent (Lookup (Arg 2)) UT, int, int]),
+                             (NanoSleep, SysSig int [ptr In timespec, ptr Out timespec]),
+                             (SetGID, SysSig int [int]),
+                             (Wait4, SysSig int [pid, ptr Out int, int, ptr Out rUsage]),
+                             (SetGroups, SysSig int [size, Ptr In gid (Lookup (Arg 0)) UT]),
+                             (SetUID, SysSig int [uid]),
+                             (SetSID, SysSig int []),
+                             (ChDir, SysSig int [path]),
+                             (GetGID, SysSig gid []),
+                             (EPollCreate, SysSig int [int]),
+                             (EPollCtl, SysSig int [int, int, int, ptr In epollEvent]),
+                             (Listen, SysSig int [int, int]),
+                             (Pipe, SysSig int [Ptr Out int (Const 2) UT, int]),
                              (Close, SysSig int [int]),
                              (Access, SysSig int [path, int]),
-                             (Open, SysSig int [path, int, mode]),
+                             (Open, SysSig int [path, int]),
+                             (FAdvise64, SysSig int [int, off, off, int]),
+                             (GetEGID, SysSig gid []),
                              (Time, SysSig time [ptr Out time]),
                              (FCntl, SysSig int [int, int]), -- TODO Set up separate sycalls for each command to remove untypedness after this
                              (Read, SysSig int [int, Ptr Out void (Lookup (Arg 2)) UT, size]),
                              (Select, SysSig int [int, fdSet, fdSet, fdSet, Ptr InOut timeVal (Const 1) UT]),
                              (GetTimeOfDay, SysSig int [ptr Out timeVal, ptr Out timeZone]),
                              (GetRUsage, SysSig int [int, ptr Out rUsage]),
+                             (GetRLimit, SysSig int [int, ptr Out rLimit]),
                              (Times, SysSig clock [ptr Out tms]),
                              (FStat, SysSig int [int, ptr Out stat]),
                              (MMap, SysSig (Ptr Out void (Lookup (Arg 1)) UT) [rawPtr, size,int, int, int, off]),
                              (Brk, SysSig int [rawPtr]),
-                             (IOCtl, SysSig int [int, int]), --TODO Break up into smaller syscalls
+                             (IOCtl, SysSig int [int, int]), --TODO Break up into smaller syscalls, this is B.S.
+                             (GetEUID, SysSig uid []),
+                             (UMask, SysSig mode [mode]),
+                             (SocketPair, SysSig int [int, int, int, Ptr Out int (Const 2) UT]),
+                             (Dup2, SysSig int [int, int]),
+                             (ExecVE, SysSig int [path, argv, argv]), --TODO get userspace loader
+                             (GetUID, SysSig int [int]),
+                             (UTime, SysSig int [path, Ptr In utimbuf (Const 1) UT]),
+                             (Unlink, SysSig int [path]),
+                             --TODO HOLY FUCKING GODDAMN SHIT - we can't do this right because it doesn't know where to get the pointer from B|
+                             (GetCWD, SysSig rawPtr  [Ptr Out char (Lookup (Arg 1)) NT, size]),
+                             --(GetCWD, SysSig (Ptr Out char (Lookup (Arg 1)) NT) [Ptr Out char (Lookup (Arg 1)) NT, size]),
                              (ClockGetTime, SysSig int [clockId, ptr Out timespec]),
+                             (Accept, SysSig int [int, Ptr Out void (Lookup (Index 0 (Arg 2))) UT, ptr Out socklen]),
+                             (LStat, SysSig int [path, ptr Out stat]),
                              (Socket, SysSig int [int, int, int]),
                              (SafeMMap, SysSig (Ptr Out void (Lookup (Arg 1)) UT) [rawPtr, size,int, int, int, off]),
                              (MProtect, SysSig int [rawPtr, size, int]),
                              (Clone, SysSig int []), -- This is special, as we deal with clone by monitoring the new process/thread
                              (SetRobustList, SysSig long [ptr In robustListHead, size]),
                              (Futex, SysSig int []),
+                             (GetITimer, SysSig int [ptr Out itimer]),
                              --(Futex, SysSig int [ptr InOut int, int, int, ptr Out timespec, ptr InOut int, int]), --TODO modalize this syscall
                              (Bind, SysSig int [int, Ptr In void (Lookup (Arg 2)) UT, socklen]),
                              (GetSockName, SysSig int [int, Ptr Out void (Lookup (Index 0 (Arg 2))) UT, ptr Out socklen]),
@@ -136,7 +182,19 @@ syscallTable = Map.fromList [(Pipe, SysSig int [Ptr Out int (Const 2) UT, int]),
                              (Write, SysSig ssize [int, Ptr In void (Lookup (Arg 2)) UT, size]),
                              (GetSockOpt, SysSig int [int, int, int, Ptr Out void (Lookup (Index 0 (Arg 4))) UT, ptr Out socklen]),
                              (GetPeerName, SysSig int [int, Ptr Out void (Lookup (Index 0 (Arg 2))) UT, ptr Out socklen]),
-                             (ExitGroup, SysSig int [int])
+                             (ExitGroup, SysSig int [int]),
+                             (GetPID, SysSig int []),
+                             (SetITimer, SysSig int [int, ptr In itimer, ptr Out itimer]),
+                             (MkDir, SysSig int [path, mode]),
+                             (RTSigAction, SysSig int [int, ptr In sigaction, ptr Out sigaction]),
+                             (LSeek, SysSig off [int, off, int]),
+                             (GetDEnts, SysSig int [int, Ptr Out void (Lookup (Arg 2)) UT, int]),
+                             (RTSigProcMask, SysSig int [int, ptr In sigset, ptr Out sigset]),
+                             (TGKill, SysSig int [int, int, int]),
+                             (ReadV, SysSig ssize [int, Ptr In (iovec Out) (Lookup (Arg 2)) UT, int]),
+                             (WriteV, SysSig ssize [int, Ptr In (iovec In) (Lookup (Arg 2)) UT, int]),
+                             (SendFile, SysSig ssize [int, int, ptr InOut off, size]),
+                             (Shutdown, SysSig int [int, int])
                              ]
 {-
 (GetEUID, SysSig []),

@@ -27,7 +27,7 @@ main = do
                                 --putStrLn "Channel unloaded, writing out"
                                 --print $ length sysList
                                 BS.writeFile logFile $ encode sysList
-                                --putStrLn "Complete."
+                                putStrLn "Complete."
       Replay unsafe logFile -> do --putStrLn "Beginning decode phase"
                                   sysList <- fmap decode $ BS.readFile logFile
                                   evaluate sysList

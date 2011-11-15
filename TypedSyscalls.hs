@@ -20,7 +20,7 @@ setup :: Trace ([Word64], [Type], Word64, Type, SyscallID)
 setup = do
   regs <- getRegs
   let sid = syscallID regs
-  liftIO $ print sid
+--  liftIO $ print sid
   let SysSig rsig sigs = getSig sid
   let args = map ($ regs) callConv
   let r = (take (length sigs) args, sigs, rax regs, rsig, sid)
@@ -48,7 +48,7 @@ getWord p n = fmap (mask n) $ tracePeek $ raw p
 readBound :: [Word64] -> [Type] -> Bound -> Lookup -> Trace Int
 readBound args tys bound self = do
   b <- readBound' args tys bound self
-  liftIO $ putStrLn $ "Got bound: " ++ (show b) ++ " from " ++ (show bound)
+--  liftIO $ putStrLn $ "Got bound: " ++ (show b) ++ " from " ++ (show bound)
   return b
 readBound' args tys bound self =
   case bound of
@@ -60,7 +60,7 @@ readBound' args tys bound self =
 readLookup :: [Word64] -> [Type] -> Lookup -> Lookup -> Trace (Word64, Word64, Type)
 readLookup args tys l s = do
   r@(x, _, ty) <- readLookup' args tys l s
-  liftIO $ putStrLn $ "Got " ++ (show (x, ty)) ++ " from " ++ (show l)
+--  liftIO $ putStrLn $ "Got " ++ (show (x, ty)) ++ " from " ++ (show l)
   return r
 readLookup' args tys l s =
   case l of
@@ -157,7 +157,7 @@ getSig sid =
 readOutput :: Trace SysRes
 readOutput = do
   (args, sigs, ret, rsig, _) <- setup
-  liftIO $ print sigs
+--  liftIO $ print sigs
   ress <- fmap concat $ zipWithM3 (readRes (args ++ [ret]) (sigs ++ [rsig])) (map Arg [0..]) (args ++ [ret]) (sigs ++ [rsig])
   return $ SysRes ret ress
 
@@ -174,7 +174,7 @@ writeOutput (SysRes r ress) = do
   regs <- getRegs
   --liftIO $ print ress
   (args, sigs, _, rsig, _) <- setup
-  liftIO $ print sigs
+--  liftIO $ print sigs
   setRegs $ regs {rax = r}
   mapM_ (writeRes (args ++ [r]) (sigs ++ [rsig])) ress
 
@@ -183,17 +183,17 @@ wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral
 
 writeRes :: [Word64] -> [Type] -> (Lookup, Datum) -> Trace ()
 writeRes args types (look, Buf x) = do
-  liftIO $ putStrLn $ "Trying to output buffer at " ++ (show look)
+--  liftIO $ putStrLn $ "Trying to output buffer at " ++ (show look)
   (v, _, ty) <- readLookup args types look (error "Self shouldn't be in our output")
   case ty of
      Ptr _ _ _ _ -> return ()
      _ -> error $ "Not a pointer! " ++ (show ty) ++ " " ++ (show look)
   writeByteString x (raw v)
-  liftIO $ putStrLn "Success."
+--  liftIO $ putStrLn "Success."
 --Arguments are recorded at the moment (maybe should stop this) but no reason to replay them.
 writeRes _ _ (Arg _, _) = return ()
 writeRes args types (look, SmallDatum x) = do
-  liftIO $ putStrLn $ "Trying to output small datum at " ++ (show look)
+--  liftIO $ putStrLn $ "Trying to output small datum at " ++ (show look)
   (_, v, Small n) <- readLookup args types look (error "No self :(")
   case n of
     1 -> tracePoke (raw v) ((fromIntegral x) :: Word8)
@@ -201,4 +201,4 @@ writeRes args types (look, SmallDatum x) = do
     4 -> tracePoke (raw v) ((fromIntegral x) :: Word32)
     8 -> tracePoke (raw v) ((fromIntegral x) :: Word64)
     _ -> error "Unsupported smallsize"
-  liftIO $ putStrLn "Success."
+--  liftIO $ putStrLn "Success."
