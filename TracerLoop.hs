@@ -10,8 +10,9 @@ import Util
 import Data.Int
 import qualified Data.Map as Map
 import System.Exit
+import Control.Concurrent.STM.BTChan
 
-makeLogger :: TChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
+makeLogger :: BTChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
 makeLogger syscalls = do
   tls <- newIORef Map.empty
   let writeTLS t v = do
@@ -28,14 +29,14 @@ makeLogger syscalls = do
                    PreSyscall  -> do sysIn <- readInput
                                      case sysIn of
                                        (SysReq ExitGroup _) -> liftIO $
-                                         atomically $ writeTChan syscalls $
+                                         atomically $ writeBTChan syscalls $
                                            (tpid, Syscall sysIn (SysRes 0 []))
                                        
                                        _ -> liftIO $ writeTLS tpid sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
                                      sys    <- readOutput
                                      --liftIO $ print (sysIn, sys)
-                                     liftIO $ atomically $ writeTChan
+                                     liftIO $ atomically $ writeBTChan
                                        syscalls $ (tpid, Syscall sysIn sys)
                    Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
                                   if (x == 11)
@@ -46,9 +47,9 @@ makeLogger syscalls = do
                                   liftIO $ writeTLS tp sysIn
 
 ignoreit _ _ = return ()
-sysc = id
---sysc (SysReq n _) = n
-streamEmu :: TChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
+--sysc = id
+sysc (SysReq n _) = n
+streamEmu :: BTChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
 streamEmu syscalls = do
   tls <- newIORef Map.empty
   ttt <- newIORef (Map.empty, Map.empty)
@@ -70,13 +71,13 @@ streamEmu syscalls = do
   let encodeThread t = do
          (_, ttt') <- readIORef ttt
          return (ttt' Map.! t)
-  z@(t0,_) <- atomically $ readTChan syscalls
-  atomically $ unGetTChan syscalls z
+  z@(t0,_) <- atomically $ readBTChan syscalls
+  atomically $ unGetBTChan syscalls z
   let emptyReg t t' = do
         (ttt', _) <- readIORef ttt
         if Map.null ttt' then registerThread t t' else return ()
   let self = \tpid e -> do
-             liftIO $ print (tpid, e)
+             --liftIO $ print (tpid, e)
              case e of
                    Split newtid -> do --Assume that a clone is being
                                       --processed
@@ -87,10 +88,10 @@ streamEmu syscalls = do
                    PreSyscall -> do
                      liftIO $ emptyReg tpid t0
                      sysIn <- readInput
-                     liftIO $ print (sysc sysIn)
+                     --liftIO $ print (sysc sysIn)
                      t <- liftIO $ decodeThread tpid
                      regs <- getRegs
-                     ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readTChan
+                     ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readBTChan
                                               syscalls
                      sys' <- case sysIn of
                          (SysReq MMap xs) -> do
@@ -115,7 +116,7 @@ streamEmu syscalls = do
                                                   error "Replace me with clean death" --syscalls sys
                                else return ()
                         else do tz' <- liftIO $ encodeThread t'
-                                liftIO $ atomically $ unGetTChan syscalls ce
+                                liftIO $ atomically $ unGetBTChan syscalls ce
                                 sleep
                                 wakeUp tz'
                    PostSyscall -> do
@@ -129,12 +130,12 @@ streamEmu syscalls = do
                                              SysRes _ vs -> writeOutput $ SysRes (rax regs) vs
                        _ -> if not $ passthrough i then writeOutput o else return ()
                    Signal 11 -> error "Segfault encountered"
-                   _ -> return ()
+                   x -> liftIO $ print x
   return self
 
 streamRewrite tpid z@(SysReq SetSockOpt _) y syscalls = do
-  liftIO $ atomically $ do unGetTChan syscalls (tpid, y)
-                           unGetTChan syscalls (tpid, (Syscall z (SysRes 0 [])))
+  liftIO $ atomically $ do unGetBTChan syscalls (tpid, y)
+                           unGetBTChan syscalls (tpid, (Syscall z (SysRes 0 [])))
   return True
 streamRewrite _ _ _ _ = return False
 

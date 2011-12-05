@@ -6,8 +6,8 @@ type Exec = (FilePath, [String])
 
 data Job = Record Exec FilePath
          | Replay Exec FilePath
-
-data Mode = RecordMode | ReplayMode deriving (Read, Show)
+         | Tandem Exec Exec
+data Mode = RecordMode | ReplayMode | TandemMode deriving (Read, Show)
 
 getJob :: IO Job
 getJob = do
@@ -15,3 +15,4 @@ getJob = do
    case (read mode) of
       RecordMode -> return $ Record (a, args) b
       ReplayMode -> return $ Replay (a, args) b
+      TandemMode -> return $ Tandem (a, args) (b, args)

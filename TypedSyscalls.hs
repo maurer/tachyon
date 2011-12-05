@@ -20,7 +20,7 @@ setup :: Trace ([Word64], [Type], Word64, Type, SyscallID)
 setup = do
   regs <- getRegs
   let sid = syscallID regs
---  liftIO $ print sid
+  --liftIO $ print sid
   let SysSig rsig sigs = getSig sid
   let args = map ($ regs) callConv
   let r = (take (length sigs) args, sigs, rax regs, rsig, sid)
@@ -103,7 +103,9 @@ readRec recurse record args tys look arg ty = do
     Ptr ioc ty'@(Small n) bound nt | record ioc -> do b <- fmap (n *) $ readBound args tys bound look
                                                       buf <- case nt of
                                                                UT -> readByteString (raw arg) b
-                                                               NT -> traceReadNullTerm (raw arg) b
+                                                               NT -> do x <- traceReadNullTerm (raw arg) b
+                                                                        liftIO $ print x
+                                                                        return x
                                                       return [(look, Buf buf)]
     --This case is meant to catch all direct struct pointers. If they're in arrays of some sort, they'll fall through
     --and recurse back to here later after some checks and such.
