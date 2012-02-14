@@ -9,6 +9,7 @@ import Data.Binary
 import Data.List
 import System.Trace
 import Control.Concurrent.STM.BTChan
+import Data.Binary.Get
 
 import Trace
 import Syscall
@@ -33,25 +34,16 @@ main = do
                                      putMVar logLock ()
    syscalls <- newBTChanIO 20
    case target of
-   --TODO make record and replay work right again
       Record safe logFile -> do logger   <- makeLogger syscalls log
                                 target   <- openFile logFile WriteMode
                                 lFinish  <- trace logger safe
                                 serialize syscalls target
                                 takeMVar lFinish
-      Replay unsafe logFile -> do --putStrLn "Beginning decode phase"
-                                  sysList <- fmap decode $ BS.readFile logFile
-                                  evaluate sysList
-                                  --putStrLn "Decoded."
-                                  {-
-                                  atomically $
-                                    mapM (writeTChan syscalls) sysList
-                                  --putStrLn "Flushed to channel."
-                                  emu     <- streamEmu syscalls
+      Replay unsafe logFile -> do source <- BS.readFile logFile
+                                  forkIO $ load source syscalls
+                                  emu     <- streamEmu syscalls log
                                   eFinish <- trace emu unsafe
                                   takeMVar eFinish
-                                  --putStrLn "Execution complete"
-                                  -}
       Tandem safe unsafe -> do logger <- makeLogger syscalls log
                                print "Starting first trace"
                                lFinish <- trace logger safe
@@ -63,6 +55,16 @@ main = do
                                putStrLn "Original finished."
                                takeMVar eFinish
                                putStrLn "Replay finished."
+
+load source c | not (BS.null source) = do
+  let (res, source', _) = runGetState get source 0
+  flush res c
+  load source' c
+              | otherwise = return ()
+
+flush [] _ = return ()
+flush (x:xs) c = do atomically $ writeBTChan c x
+                    flush xs c
 
 serialize :: Binary a => BTChan a -> Handle -> IO ()
 serialize serial target = catch (do

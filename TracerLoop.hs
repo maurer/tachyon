@@ -102,7 +102,6 @@ streamEmu syscalls rawLog = do
                      liftIO $ emptyReg tpid t0
                      sysIn <- readInput
                      log $ formatIn sysIn
-                     --liftIO $ print (sysc sysIn)
                      t <- liftIO $ decodeThread tpid
                      regs <- getRegs
                      ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readBTChan
@@ -122,7 +121,8 @@ streamEmu syscalls rawLog = do
                      liftIO $ writeTLS t (sys, sys', orig_rax regs)
                      if t == t' --Our current thread is the executing thread
                         then if not $ compat i sysIn
-                               then do x <- streamRewrite t sysIn sys syscalls
+                               then do log "Incompatible"
+                                       x <- streamRewrite t sysIn sys syscalls
                                        if x
                                           then do setRegs rbak
                                                   self tpid e
