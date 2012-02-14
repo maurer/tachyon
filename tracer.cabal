@@ -6,7 +6,6 @@ Maintainer:          maurer@matthewmaurer.org
 Category:            System
 Build-type:          Simple
 Cabal-version:       >=1.2
-
 Executable tracer
   Main-is: tracer.hs
   Build-depends: base, binary, trace, containers, bytestring, unix, split, transformers, stm, process, bounded-tchan

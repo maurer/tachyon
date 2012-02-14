@@ -15,7 +15,7 @@ data Syscall = Syscall SysReq SysRes deriving Show
 data SysSig = SysSig Type [Type] deriving Show
 
 data Datum = SmallDatum Word64 | Buf BS.ByteString deriving (Show, Eq)
-data IOC = In | Out | InOut deriving Show
+data IOC = Neither | In | Out | InOut deriving Show
 data NT = NT | UT deriving (Show, Eq)
 data Lookup = Arg Int | Index Int Lookup | Self | Undo Lookup deriving (Show, Eq)
 data Bound = Const Int | Mult Bound Int | Lookup Lookup deriving Show

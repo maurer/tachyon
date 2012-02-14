@@ -88,7 +88,7 @@ size (Ptr _ _ _ _) = wordSize
 
 input In    = True
 input InOut = True
-input Out   = False
+input _   = False
 
 readArg = readRec input input
 
@@ -104,7 +104,7 @@ readRec recurse record args tys look arg ty = do
                                                       buf <- case nt of
                                                                UT -> readByteString (raw arg) b
                                                                NT -> do x <- traceReadNullTerm (raw arg) b
-                                                                        liftIO $ print x
+                                                                       -- liftIO $ print x
                                                                         return x
                                                       return [(look, Buf buf)]
     --This case is meant to catch all direct struct pointers. If they're in arrays of some sort, they'll fall through

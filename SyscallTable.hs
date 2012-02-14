@@ -74,7 +74,8 @@ ptr ioc ty = Ptr ioc ty (Const 1) UT
 
 socklen = Small 4
 
-rawPtr = Small 8
+rawPtr = Ptr Neither void (Const 0) UT
+
 clockId = Small 4
 
 ssize = Small 8
@@ -194,7 +195,8 @@ syscallTable = Map.fromList [(EPollWait, SysSig int [int, Ptr Out epollEvent (Lo
                              (ReadV, SysSig ssize [int, Ptr In (iovec Out) (Lookup (Arg 2)) UT, int]),
                              (WriteV, SysSig ssize [int, Ptr In (iovec In) (Lookup (Arg 2)) UT, int]),
                              (SendFile, SysSig ssize [int, int, ptr InOut off, size]),
-                             (Shutdown, SysSig int [int, int])
+                             (Shutdown, SysSig int [int, int]),
+                             (SetArchPrCtl, SysSig int [int, rawPtr]) --TODO possibly wrong
                              ]
 {-
 (GetEUID, SysSig []),

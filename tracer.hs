@@ -2,6 +2,7 @@ import Args
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
+import System.IO
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary
 import Data.List
@@ -21,9 +22,17 @@ taker k = do
 
 main = do
    job      <- getJob
+   let target = jTarget job
+   logLock <- newMVar ()
+   let log = case jTrace job of
+               Nothing -> \_ -> return ()
+               Just h  -> \str -> do takeMVar logLock
+                                     hPutStr h str
+                                     putMVar logLock ()
    syscalls <- newBTChanIO 20
-   case job of
-      Record safe logFile -> do logger   <- makeLogger syscalls
+   case target of
+   --TODO make record and replay work right again
+      Record safe logFile -> do logger   <- makeLogger syscalls log
                                 forkIO $ taker syscalls
                                 lFinish  <- trace logger safe
                                 takeMVar lFinish
@@ -48,9 +57,12 @@ main = do
                                   takeMVar eFinish
                                   --putStrLn "Execution complete"
                                   -}
-      Tandem safe unsafe -> do logger <- makeLogger syscalls
+      Tandem safe unsafe -> do logger <- makeLogger syscalls log
+                               print "Starting first trace"
                                lFinish <- trace logger safe
-                               emu    <- streamEmu syscalls  
+                               print "Building emulator"
+                               emu    <- streamEmu syscalls log
+                               print "Starting second trace"
                                eFinish <- trace emu unsafe
                                takeMVar lFinish
                                putStrLn "Original finished."

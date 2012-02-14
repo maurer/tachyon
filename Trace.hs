@@ -20,11 +20,16 @@ trace :: (TPid -> Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
 trace handler (exe, args) = do
   finish <- newEmptyMVar
   forkIO $
-           (do th <- traceExec exe args
+           (do print "Trying to trace"
+               th <- traceExec exe args
+               print "Trace activating"
+              -- runTrace th $ traceWithHandler handler) {-
                runTrace th $ do
                  exeEntry <- uglyGetEntry exe
                  setBreak exeEntry
+                 liftIO $ print "Waiting for breakpoint"
                  traceEvent (\_ -> (== Breakpoint))
+                 liftIO $ print "breakpoint"
                  traceWithHandler handler) `finally` (putMVar finish ())
   return finish
 

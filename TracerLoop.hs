@@ -12,8 +12,13 @@ import qualified Data.Map as Map
 import System.Exit
 import Control.Concurrent.STM.BTChan
 
-makeLogger :: BTChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
-makeLogger syscalls = do
+logFormat xs = (concatMap (\x -> "[" ++ x ++ "]") (init xs)) ++ ": " ++ (last xs) ++ "\n"
+
+formatIn = show
+
+makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> IO (TPid -> Event -> Trace ())
+makeLogger syscalls rawLog = do
+  let logStr x = liftIO $ rawLog x
   tls <- newIORef Map.empty
   let writeTLS t v = do
         tls' <- readIORef tls
@@ -24,9 +29,10 @@ makeLogger syscalls = do
   let readTLS t = do v <- fmap (Map.! t) $ readIORef tls
                      readIORef v
   return $ \tpid e -> do
-             --liftIO $ print (tpid, e)
+             let log s = logStr $ logFormat ["logger", (show tpid), s]
              case e of
                    PreSyscall  -> do sysIn <- readInput
+                                     log $ formatIn sysIn
                                      case sysIn of
                                        (SysReq ExitGroup _) -> liftIO $
                                          atomically $ writeBTChan syscalls $
@@ -35,22 +41,25 @@ makeLogger syscalls = do
                                        _ -> liftIO $ writeTLS tpid sysIn
                    PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
                                      sys    <- readOutput
+                                     
                                      --liftIO $ print (sysIn, sys)
                                      liftIO $ atomically $ writeBTChan
                                        syscalls $ (tpid, Syscall sysIn sys)
-                   Signal x -> do liftIO $ putStrLn $ "SIGNAL: " ++ (show x)
+                   Signal x -> do error $ "SIGNAL: " ++ (show x)
                                   if (x == 11)
                                      then error "Segfault encountered."
                                      else return ()
-                   Exit _ -> liftIO $ putStrLn $ "ThreadExit: " ++ (show tpid)
-                   Split tp -> do sysIn <- liftIO $ readTLS tpid
+                   Exit _ -> log $ "ThreadExit"
+                   Split tp -> do log $ "Split: " ++ (show tp)
+                                  sysIn <- liftIO $ readTLS tpid
                                   liftIO $ writeTLS tp sysIn
 
 ignoreit _ _ = return ()
 --sysc = id
 sysc (SysReq n _) = n
-streamEmu :: BTChan (TPid, Syscall) -> IO (TPid -> Event -> Trace ())
-streamEmu syscalls = do
+streamEmu :: BTChan (TPid, Syscall) -> (String -> IO ()) -> IO (TPid -> Event -> Trace ())
+streamEmu syscalls rawLog = do
+  let logStr x = liftIO $ rawLog x
   tls <- newIORef Map.empty
   ttt <- newIORef (Map.empty, Map.empty)
   let writeTLS t v = do
@@ -71,12 +80,16 @@ streamEmu syscalls = do
   let encodeThread t = do
          (_, ttt') <- readIORef ttt
          return (ttt' Map.! t)
+  print "Waiting for first syscall..."
   z@(t0,_) <- atomically $ readBTChan syscalls
+  print "Got it!"
   atomically $ unGetBTChan syscalls z
+  print "Put it back."
   let emptyReg t t' = do
         (ttt', _) <- readIORef ttt
         if Map.null ttt' then registerThread t t' else return ()
   let self = \tpid e -> do
+             let log x = logStr $ logFormat ["emulate", (show tpid), x]
              --liftIO $ print (tpid, e)
              case e of
                    Split newtid -> do --Assume that a clone is being
@@ -88,6 +101,7 @@ streamEmu syscalls = do
                    PreSyscall -> do
                      liftIO $ emptyReg tpid t0
                      sysIn <- readInput
+                     log $ formatIn sysIn
                      --liftIO $ print (sysc sysIn)
                      t <- liftIO $ decodeThread tpid
                      regs <- getRegs
@@ -143,6 +157,7 @@ buildTPid = P . fromIntegral
 compat (SysReq Connect _) (SysReq Connect _) = True -- Lie
 compat (SysReq RTSigAction _) (SysReq RTSigAction _) = True
 compat (SysReq MUnmap _) (SysReq MUnmap _) = True
+compat (SysReq MProtect _) (SysReq MProtect _) = True
 compat x y = x == y
 
 --compat (SysReq n _) (SysReq n' _) = n == n' --Woefully insufficient, but sanity
