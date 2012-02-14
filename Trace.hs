@@ -23,17 +23,7 @@ trace handler (exe, args) = do
            (do print "Trying to trace"
                th <- traceExec exe args
                print "Trace activating"
-              -- runTrace th $ traceWithHandler handler) {-
-               runTrace th $ do
-                 exeEntry <- uglyGetEntry exe
-                 setBreak exeEntry
-                 liftIO $ print "Waiting for breakpoint"
-                 traceEvent (\_ -> (== Breakpoint))
-                 liftIO $ print "breakpoint"
-                 traceWithHandler handler) `finally` (putMVar finish ())
+               runTrace th $ traceWithHandler handler) `finally` (putMVar finish ())
   return finish
 
 wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral
-
-uglyGetEntry str = liftIO $ do
-  fmap (wordTrace . read) $ readProcess "/bin/bash" ["-c", "readelf -h " ++ str ++ " | grep Entry | awk '{print $4}'"] ""
