@@ -1,4 +1,5 @@
 import Args
+import Prelude hiding (catch)
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
@@ -10,6 +11,7 @@ import System.Trace
 import Control.Concurrent.STM.BTChan
 
 import Trace
+import Syscall
 
 instance Binary PPid where
   get = fmap (P . toEnum) get
@@ -33,17 +35,10 @@ main = do
    case target of
    --TODO make record and replay work right again
       Record safe logFile -> do logger   <- makeLogger syscalls log
-                                forkIO $ taker syscalls
+                                target   <- openFile logFile WriteMode
                                 lFinish  <- trace logger safe
+                                serialize syscalls target
                                 takeMVar lFinish
-                                
-                                --putStrLn "Execution complete, unloading channel"
-                         {-       sysList <- atomically $
-                                  getCurrentChanContents syscalls
-                                --putStrLn "Channel unloaded, writing out"
-                                --print $ length sysList
-                                BS.writeFile logFile $ encode sysList
-                                putStrLn "Complete." -}
       Replay unsafe logFile -> do --putStrLn "Beginning decode phase"
                                   sysList <- fmap decode $ BS.readFile logFile
                                   evaluate sysList
@@ -68,10 +63,24 @@ main = do
                                putStrLn "Original finished."
                                takeMVar eFinish
                                putStrLn "Replay finished."
-getCurrentChanContents chan = do
-   b <- isEmptyTChan chan
-   if b
-      then return []
-      else do x <- readTChan chan
-              xs <- getCurrentChanContents chan
-              return $ x : xs
+
+serialize :: Binary a => BTChan a -> Handle -> IO ()
+serialize serial target = catch (do
+  dumpChannel serial target
+  serialize serial target) $ \e -> do
+    case fromException e of
+           Just BlockedIndefinitelyOnSTM -> return () --We're done
+           _ -> throw e
+
+dumpChannel :: Binary a => BTChan a -> Handle -> IO ()
+dumpChannel serial target = do
+  x <- atomically $ readBTChan serial
+  rest <- atomically $ readRest serial
+  BS.hPutStr target $ encode $ x : rest
+  where readRest :: BTChan a -> STM [a]
+        readRest serial = do
+          mx <- tryReadBTChan serial
+          case mx of
+            Just x -> do xs <- readRest serial
+                         return $ x : xs
+            Nothing -> return []
