@@ -34,7 +34,7 @@ main = do
                                      putMVar logLock ()
    syscalls <- newBTChanIO 20
    case target of
-      Record safe logFile -> do logger   <- makeLogger syscalls log
+      Record safe logFile -> do logger   <- makeLogger syscalls log True
                                 target   <- openFile logFile WriteMode
                                 lFinish  <- trace logger safe
                                 serialize syscalls target
@@ -44,7 +44,7 @@ main = do
                                   emu     <- streamEmu syscalls log
                                   eFinish <- trace emu unsafe
                                   takeMVar eFinish
-      Tandem safe unsafe -> do logger <- makeLogger syscalls log
+      Tandem safe unsafe -> do logger <- makeLogger syscalls log False
                                print "Starting first trace"
                                lFinish <- trace logger safe
                                print "Building emulator"

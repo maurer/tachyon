@@ -11,13 +11,21 @@ import Data.Int
 import qualified Data.Map as Map
 import System.Exit
 import Control.Concurrent.STM.BTChan
+import Data.Binary
+import Data.Word
+import Foreign.Ptr
 
 logFormat xs = (concatMap (\x -> "[" ++ x ++ "]") (init xs)) ++ ": " ++ (last xs) ++ "\n"
 
 formatIn = show
 
-makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> IO (TPid -> Event -> Trace ())
-makeLogger syscalls rawLog = do
+instance Binary WordPtr where
+  get = fmap fromIntegral $ (get :: Get Word64)
+  put x = put $ ((fromIntegral x) :: Word64)
+
+makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (TPid -> Event -> Trace ())
+makeLogger syscalls rawLog coreDumps = do
+  coreNum <- newIORef 0
   let logStr x = liftIO $ rawLog x
   tls <- newIORef Map.empty
   let writeTLS t v = do
@@ -30,8 +38,17 @@ makeLogger syscalls rawLog = do
                      readIORef v
   return $ \tpid e -> do
              let log s = logStr $ logFormat ["logger", (show tpid), s]
+             let dumpCore | coreDumps = do
+                   c <- core
+                   log "cored!"
+                   v <- liftIO $ atomicModifyIORef coreNum (\x -> (x + 1, x))
+                   liftIO $ encodeFile ("logger." ++ (show tpid) ++ "." ++ (show v)) c
+                          | otherwise = return ()
              case e of
-                   PreSyscall  -> do sysIn <- readInput
+                   PreSyscall  -> do log "Coring pre"
+                                     dumpCore
+                                     log "Done coring pre"
+                                     sysIn <- readInput
                                      log $ formatIn sysIn
                                      case sysIn of
                                        (SysReq ExitGroup _) -> liftIO $
@@ -45,6 +62,9 @@ makeLogger syscalls rawLog = do
                                      --liftIO $ print (sysIn, sys)
                                      liftIO $ atomically $ writeBTChan
                                        syscalls $ (tpid, Syscall sysIn sys)
+                                     log "Coring post"
+                                     dumpCore
+                                     log "Done coring post"
                    Signal x -> do error $ "SIGNAL: " ++ (show x)
                                   if (x == 11)
                                      then error "Segfault encountered."
