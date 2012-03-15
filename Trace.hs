@@ -20,9 +20,7 @@ trace :: (TPid -> Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
 trace handler (exe, args) = do
   finish <- newEmptyMVar
   forkIO $
-           (do print "Trying to trace"
-               th <- traceExec exe args
-               print "Trace activating"
+           (do th <- traceExec exe args
                runTrace th $ traceWithHandler handler) `finally` (putMVar finish ())
   return finish
 
