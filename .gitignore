@@ -1,3 +1,5 @@
+*.log
+logger.*
 cabal-dev/
 paperdata/
 dist/
