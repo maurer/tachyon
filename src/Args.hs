@@ -16,8 +16,6 @@ data Job = Job { jTarget :: Target
 
 defaultJob = Job {jTarget = undefined, jTrace = Nothing}
 
-lighty = ["-D", "-f", "/etc/lighttpd/lighttpd.conf"]
-
 getJob :: IO Job
 getJob = do
    allArgs <- getArgs
