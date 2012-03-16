@@ -8,6 +8,8 @@ Build-type:          Simple
 Cabal-version:       >=1.2
 Executable tracer
   Main-is: tracer.hs
+  Hs-Source-Dirs: src
+  Other-Modules: Syscall, Args, Encoding, SyscallTable, Trace, TracerLoop, TypedSyscalls, Util
   Build-depends: base, binary, trace, containers, bytestring, unix, split, transformers, stm, process, bounded-tchan
   Extensions: ScopedTypeVariables
 --  GHC-options: -auto-all -rtsopts
