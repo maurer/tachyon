@@ -1,0 +1,6 @@
+[submodule "trace"]
+	path = trace
+	url = git@github.com:maurer/trace.git
+[submodule "ptrace"]
+	path = ptrace
+	url = git@github.com:maurer/ptrace.git
