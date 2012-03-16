@@ -77,8 +77,9 @@ makeLogger syscalls rawLog coreDumps = do
 ignoreit _ _ = return ()
 --sysc = id
 sysc (SysReq n _) = n
-streamEmu :: BTChan (TPid, Syscall) -> (String -> IO ()) -> IO (TPid -> Event -> Trace ())
-streamEmu syscalls rawLog = do
+streamEmu :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (TPid -> Event -> Trace ())
+streamEmu syscalls rawLog coreDumps = do
+  coreNum <- newIORef 0
   let logStr x = liftIO $ rawLog x
   tls <- newIORef Map.empty
   ttt <- newIORef (Map.empty, Map.empty)
@@ -110,7 +111,12 @@ streamEmu syscalls rawLog = do
         if Map.null ttt' then registerThread t t' else return ()
   let self = \tpid e -> do
              let log x = logStr $ logFormat ["emulate", (show tpid), x]
-             --liftIO $ print (tpid, e)
+             let dumpCore | coreDumps = do
+                   c <- core
+                   log "cored!"
+                   v <- liftIO $ atomicModifyIORef coreNum (\x -> (x + 1, x))
+                   liftIO $ encodeFile ("emulate." ++ (show tpid) ++ "." ++ (show v)) c
+                          | otherwise = return ()
              case e of
                    Split newtid -> do --Assume that a clone is being
                                       --processed
@@ -123,6 +129,7 @@ streamEmu syscalls rawLog = do
                      sysIn <- readInput
                      log $ formatIn sysIn
                      t <- liftIO $ decodeThread tpid
+                     dumpCore
                      regs <- getRegs
                      ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readBTChan
                                               syscalls
@@ -163,6 +170,7 @@ streamEmu syscalls rawLog = do
                        (SysReq MMap _)  -> case o of
                                              SysRes _ vs -> writeOutput $ SysRes (rax regs) vs
                        _ -> if not $ passthrough i then writeOutput o else return ()
+                     dumpCore
                    Signal 11 -> error "Segfault encountered"
                    x -> liftIO $ print x
   return self

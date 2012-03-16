@@ -41,14 +41,14 @@ main = do
                                 takeMVar lFinish
       Replay unsafe logFile -> do source <- BS.readFile logFile
                                   forkIO $ load source syscalls
-                                  emu     <- streamEmu syscalls log
+                                  emu     <- streamEmu syscalls log True
                                   eFinish <- trace emu unsafe
                                   takeMVar eFinish
       Tandem safe unsafe -> do logger <- makeLogger syscalls log False
                                print "Starting first trace"
                                lFinish <- trace logger safe
                                print "Building emulator"
-                               emu    <- streamEmu syscalls log
+                               emu    <- streamEmu syscalls log False
                                print "Starting second trace"
                                eFinish <- trace emu unsafe
                                takeMVar lFinish
