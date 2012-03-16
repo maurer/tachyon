@@ -1,7 +1,8 @@
 SANDBOX=$(CURDIR)/cabal-dev
 TRACER=$(SANDBOX)/bin/tracer
+COREDIFF=$(SANDBOX)/bin/corediff
 export TRACER
-all: $(TRACER)
+all: $(TRACER) $(COREDIFF)
 
 .PHONY : init
 #TODO make this not need sudo when the variables are already right
@@ -19,7 +20,7 @@ $(SANDBOX):
 	$(CD) add-source .
 
 .PHONY: $(TRACER)
-$(TRACER): $(SANDBOX)
+$(COREDIFF) $(TRACER): $(SANDBOX)
 	$(CD) install tracer
 
 test: init $(TRACER)

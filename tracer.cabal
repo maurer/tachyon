@@ -6,6 +6,10 @@ Maintainer:          maurer@matthewmaurer.org
 Category:            System
 Build-type:          Simple
 Cabal-version:       >=1.2
+Executable corediff
+  Main-is: corediff.hs
+  Hs-Source-Dirs: src
+  Build-depends: base, binary, trace, containers, bytestring
 Executable tracer
   Main-is: tracer.hs
   Hs-Source-Dirs: src
