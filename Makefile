@@ -1,4 +1,7 @@
-all: $(SANDBOX)/bin/tracer
+SANDBOX=$(CURDIR)/cabal-dev
+TRACER=$(SANDBOX)/bin/tracer
+export TRACER
+all: $(TRACER)
 
 .PHONY : init
 #TODO make this not need sudo when the variables are already right
@@ -14,10 +17,13 @@ $(SANDBOX):
 	$(CD) add-source trace
 	$(CD) add-source .
 
-$(SANDBOX)/bin/tracer: $(SANDBOX)
+$(TRACER): $(SANDBOX)
 	$(CD) install tracer
 
-test: init $(SANDBOX)/bin/tracer
+test: init $(TRACER)
+	for test in tests/*; do \
+		make -C $$test test; \
+	done
 	
 clean:
 	rm -rf $(SANDBOX)
@@ -27,3 +33,6 @@ clean:
 	cabal clean
 	cd ..
 	cabal clean
+	for test in tests/*; do \
+		make -C $$test clean; \
+	done
