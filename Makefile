@@ -12,11 +12,13 @@ init:
 
 CD=cabal-dev -s $(SANDBOX)
 
+.PHONY: $(SANDBOX)
 $(SANDBOX):
 	$(CD) add-source ptrace
 	$(CD) add-source trace
 	$(CD) add-source .
 
+.PHONY: $(TRACER)
 $(TRACER): $(SANDBOX)
 	$(CD) install tracer
 

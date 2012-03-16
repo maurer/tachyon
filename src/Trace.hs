@@ -19,9 +19,9 @@ import Syscall
 trace :: (TPid -> Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
 trace handler (exe, args) = do
   finish <- newEmptyMVar
-  forkIO $
-           (do th <- traceExec exe args
-               runTrace th $ traceWithHandler handler) `finally` (putMVar finish ())
+  forkIO $ do th <- traceExec exe args
+              runTrace th $ traceWithHandler handler
+              putMVar finish ()
   return finish
 
 wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral
