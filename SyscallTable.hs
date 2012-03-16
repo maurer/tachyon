@@ -84,6 +84,7 @@ robustListHead = Struct [rawPtr, long, rawPtr] --TODO set it up to walk the list
 
 iovec m = Struct [Ptr m void (Lookup (Index 1 (Undo Self))) UT,
                   size]
+--OS defined, should be autogenning it somehow TODO utsname
 
 oppose In = Out
 oppose Out = In
@@ -123,6 +124,7 @@ syscallTable = Map.fromList [(EPollWait, SysSig int [int, Ptr Out epollEvent (Lo
                              (SetGroups, SysSig int [size, Ptr In gid (Lookup (Arg 0)) UT]),
                              (SetUID, SysSig int [uid]),
                              (SetSID, SysSig int []),
+                             (UName, SysSig int [Ptr Out char (Const 257) UT]),
                              (ChDir, SysSig int [path]),
                              (GetGID, SysSig gid []),
                              (EPollCreate, SysSig int [int]),
