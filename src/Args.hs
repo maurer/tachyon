@@ -12,14 +12,18 @@ data Target = Record Exec FilePath
             | Tandem Exec Exec deriving Show
 data Mode = RecordMode | ReplayMode | TandemMode deriving (Read, Show)
 data Job = Job { jTarget :: Target
-               , jTrace  :: Maybe Handle} deriving Show
+               , jTrace  :: Maybe Handle
+               , jDump   :: Bool} deriving Show
 
-defaultJob = Job {jTarget = undefined, jTrace = Nothing}
+defaultJob = Job {jTarget = undefined, jTrace = Nothing, jDump = False}
+
+argSpec = [Option ['t'] ["trace"] (ReqArg traceOpt "traceFile") "Optional file to print an execution trace to",
+           Option ['d'] ["dump"] (NoArg (\j -> return j {jDump = True})) "Whether to dump cores during execution"]
 
 getJob :: IO Job
 getJob = do
    allArgs <- getArgs
-   let (opts, (mode : a : b : args'), argsb, _) = getOpt' Permute [Option ['t'] ["trace"] (ReqArg traceOpt "traceFile") "Optional file to print an execution trace to"] allArgs
+   let (opts, (mode : a : b : args'), argsb, _) = getOpt' Permute argSpec allArgs
    let args = argsb ++ args'
    let target = case (read mode) of
                    RecordMode -> Record (a, args) b
