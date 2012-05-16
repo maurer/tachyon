@@ -14,6 +14,7 @@ import Control.Concurrent.STM.BTChan
 import Data.Binary
 import Data.Word
 import Foreign.Ptr
+import Control.Concurrent.MVar
 
 logFormat xs = (concatMap (\x -> "[" ++ x ++ "]") (init xs)) ++ ": " ++ (last xs) ++ "\n"
 
@@ -23,112 +24,116 @@ instance Binary WordPtr where
   get = fmap fromIntegral $ (get :: Get Word64)
   put x = put $ ((fromIntegral x) :: Word64)
 
-makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (TPid -> Event -> Trace ())
-makeLogger syscalls rawLog coreDumps = do
-  coreNum <- newIORef 0
+data Context a = Ctx {ctxWriteTLS :: TPid -> a -> Trace ()
+                     ,ctxReadTLS  :: TPid -> Trace a
+                     ,ctxCore     :: TPid -> Trace ()
+                     ,ctxLog      :: TPid -> String -> Trace ()
+                     ,ctxRegTh    :: TPid -> TPid -> Trace ()
+                     ,ctxDecTh    :: TPid -> Trace TPid
+                     ,ctxEncTh    :: TPid -> Trace TPid
+                     }
+
+makeContext :: String -> (String -> IO ()) -> Bool -> IO (Context a)
+makeContext prefix rawLog coreDumps = do
+  coreNum <- newMVar 0
+  tls <- newMVar Map.empty
+  ttt <- newMVar (Map.empty, Map.empty)
+  let writeTLS t v = liftIO $ do
+        tls' <- takeMVar tls
+        putMVar tls (Map.insert t v tls')
+  let readTLS t = liftIO $ fmap (Map.! t) $ readMVar tls
   let logStr x = liftIO $ rawLog x
-  tls <- newIORef Map.empty
-  let writeTLS t v = do
-        tls' <- readIORef tls
-        case Map.lookup t tls' of
-           Just z  -> writeIORef z v
-           Nothing -> do z <- newIORef v
-                         writeIORef tls (Map.insert t z tls')
-  let readTLS t = do v <- fmap (Map.! t) $ readIORef tls
-                     readIORef v
-  return $ \tpid e -> do
-             let log s = logStr $ logFormat ["logger", (show tpid), s]
-             let dumpCore | coreDumps = do
-                   c <- core
-                   log "cored!"
-                   v <- liftIO $ atomicModifyIORef coreNum (\x -> (x + 1, x))
-                   liftIO $ encodeFile ("logger." ++ (show tpid) ++ "." ++ (show v)) c
-                          | otherwise = return ()
-             case e of
-                   PreSyscall  -> do log "Coring pre"
-                                     dumpCore
-                                     log "Done coring pre"
-                                     sysIn <- readInput
-                                     log $ formatIn sysIn
-                                     case sysIn of
-                                       (SysReq ExitGroup _) -> liftIO $
-                                         atomically $ writeBTChan syscalls $
-                                           (tpid, Syscall sysIn (SysRes 0 []))
+  let log tpid s = logStr $ logFormat [prefix, (show tpid), s]
+  let dumpCore tpid | coreDumps = do
+        c <- core
+        log tpid "cored!"
+        v <- liftIO $ modifyMVar coreNum (\x -> return (x + 1, x))
+        liftIO $ encodeFile (prefix ++ "." ++ (show tpid) ++ "." ++ (show v)) c
+                    | otherwise = return ()
+  let registerThread t t' = liftIO $ do
+         (ttt', ttz') <- takeMVar ttt
+         putMVar ttt $ (Map.insert t t' ttt', Map.insert t' t ttz')
+  let decodeThread t = liftIO $ do
+         (ttt', _) <- readMVar ttt
+         return (ttt' Map.! t)
+  let encodeThread t = liftIO $ do
+         (_, ttt') <- readMVar ttt
+         return (ttt' Map.! t)
+  return $ Ctx {ctxWriteTLS = writeTLS
+               ,ctxReadTLS  = readTLS
+               ,ctxCore     = dumpCore
+               ,ctxLog      = log
+               ,ctxRegTh    = registerThread
+               ,ctxDecTh    = decodeThread
+               ,ctxEncTh    = encodeThread}
+
+loggerHandler :: BTChan (TPid, Syscall) -> Context SysReq -> (TPid -> Event -> Trace ())
+loggerHandler syscalls ctx tpid e = do
+   let log = ctxLog ctx tpid
+   let dumpCore = ctxCore ctx tpid
+   let readTLS = ctxReadTLS ctx tpid
+   let writeTLS = ctxWriteTLS ctx tpid
+   let writeSys x = liftIO $ atomically $ writeBTChan syscalls x
+   case e of
+      PreSyscall  -> do log "Coring pre"
+                        dumpCore
+                        log "Done coring pre"
+                        sysIn <- readInput
+                        log $ formatIn sysIn
+                        case sysIn of
+                           (SysReq ExitGroup _) -> liftIO $
+                               atomically $ writeBTChan syscalls $
+                                  (tpid, Syscall sysIn (SysRes 0 []))
                                        
-                                       _ -> liftIO $ writeTLS tpid sysIn
-                   PostSyscall -> do sysIn  <- liftIO $ readTLS tpid
-                                     sys    <- readOutput
-                                     
-                                     --liftIO $ print (sysIn, sys)
-                                     liftIO $ atomically $ writeBTChan
-                                       syscalls $ (tpid, Syscall sysIn sys)
-                                     log "Coring post"
-                                     dumpCore
-                                     log "Done coring post"
-                   Signal x -> do error $ "SIGNAL: " ++ (show x)
-                                  if (x == 11)
-                                     then error "Segfault encountered."
-                                     else return ()
-                   Exit _ -> log $ "ThreadExit"
-                   Split tp -> do log $ "Split: " ++ (show tp)
-                                  sysIn <- liftIO $ readTLS tpid
-                                  liftIO $ writeTLS tp sysIn
+                           _ -> writeTLS sysIn
+      PostSyscall -> do sysIn  <- readTLS
+                        sys    <- readOutput
+                        writeSys (tpid, Syscall sysIn sys)
+                        log "Coring post"
+                        dumpCore
+                        log "Done coring post"
+      Signal x -> do error $ "SIGNAL: " ++ (show x)
+                     if (x == 11)
+                        then error "Segfault encountered."
+                        else return ()
+      Exit _ -> log $ "ThreadExit"
+      Split tp -> do log $ "Split: " ++ (show tp)
+                     sysIn <- readTLS
+                     ctxWriteTLS ctx tp sysIn
+makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (Trace (), TPid -> Event -> Trace ())
+makeLogger syscalls rawLog coreDumps = do
+  ctx <- makeContext "logger" rawLog coreDumps
+  return (return (), loggerHandler syscalls ctx)
 
 ignoreit _ _ = return ()
 --sysc = id
 sysc (SysReq n _) = n
-streamEmu :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (TPid -> Event -> Trace ())
+streamEmu :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (Trace (), (TPid -> Event -> Trace ()))
 streamEmu syscalls rawLog coreDumps = do
-  coreNum <- newIORef 0
-  let logStr x = liftIO $ rawLog x
-  tls <- newIORef Map.empty
-  ttt <- newIORef (Map.empty, Map.empty)
-  let writeTLS t v = do
-        tls' <- readIORef tls
-        case Map.lookup t tls' of
-           Just z  -> writeIORef z v
-           Nothing -> do z <- newIORef v
-                         writeIORef tls (Map.insert t z tls')
-  let readTLS t = do tls' <- readIORef tls
-                     let v = tls' Map.! t
-                     readIORef v
-  let registerThread t t' = do
-         (ttt', ttz') <- readIORef ttt
-         writeIORef ttt $ (Map.insert t t' ttt', Map.insert t' t ttz')
-  let decodeThread t = do
-         (ttt', _) <- readIORef ttt
-         return (ttt' Map.! t)
-  let encodeThread t = do
-         (_, ttt') <- readIORef ttt
-         return (ttt' Map.! t)
+  ctx <- makeContext "emulator" rawLog coreDumps
+  let registerThread = ctxRegTh ctx
+  let encodeThread = ctxEncTh ctx
+  let decodeThread = ctxDecTh ctx
   print "Waiting for first syscall..."
   z@(t0,_) <- atomically $ readBTChan syscalls
   print "Got it!"
   atomically $ unGetBTChan syscalls z
   print "Put it back."
-  let emptyReg t t' = do
-        (ttt', _) <- readIORef ttt
-        if Map.null ttt' then registerThread t t' else return ()
   let self = \tpid e -> do
-             let log x = logStr $ logFormat ["emulate", (show tpid), x]
-             let dumpCore | coreDumps = do
-                   c <- core
-                   log "cored!"
-                   v <- liftIO $ atomicModifyIORef coreNum (\x -> (x + 1, x))
-                   liftIO $ encodeFile ("emulate." ++ (show tpid) ++ "." ++ (show v)) c
-                          | otherwise = return ()
+             let log = ctxLog ctx tpid
+             let dumpCore = ctxCore ctx tpid
+             let readTLS = ctxReadTLS ctx tpid
+             let writeTLS = ctxWriteTLS ctx tpid
              case e of
                    Split newtid -> do --Assume that a clone is being
                                       --processed
-                     t <- liftIO $ decodeThread tpid
-                     z@((Syscall _ (SysRes x _)), _, _) <- liftIO $ readTLS t
-                     liftIO $ registerThread newtid (buildTPid x)
-                     liftIO $ writeTLS (buildTPid x) z
+                     z@((Syscall _ (SysRes x _)), _, _) <- readTLS
+                     registerThread newtid (buildTPid x)
+                     ctxWriteTLS ctx (buildTPid x) z
                    PreSyscall -> do
-                     liftIO $ emptyReg tpid t0
                      sysIn <- readInput
                      log $ formatIn sysIn
-                     t <- liftIO $ decodeThread tpid
+                     t <- decodeThread tpid
                      dumpCore
                      regs <- getRegs
                      ce@(t', sys@(Syscall i o)) <- liftIO $ atomically $ readBTChan
@@ -145,7 +150,7 @@ streamEmu syscalls rawLog coreDumps = do
                          _ -> return sysIn
                      rbak <- getRegs
                      if not $ passthrough sys' then nopSyscall else return ()
-                     liftIO $ writeTLS t (sys, sys', orig_rax regs)
+                     writeTLS (sys, sys', orig_rax regs)
                      if t == t' --Our current thread is the executing thread
                         then if not $ compat i sysIn
                                then do log "Incompatible"
@@ -156,13 +161,13 @@ streamEmu syscalls rawLog coreDumps = do
                                           else do liftIO $ print (i, sysIn)
                                                   error "Replace me with clean death" --syscalls sys
                                else return ()
-                        else do tz' <- liftIO $ encodeThread t'
+                        else do tz' <- encodeThread t'
                                 liftIO $ atomically $ unGetBTChan syscalls ce
                                 sleep
                                 wakeUp tz'
                    PostSyscall -> do
-                     t <- liftIO $ decodeThread tpid
-                     (sys@(Syscall i o), sysIn, orax) <- liftIO $ readTLS t
+                     t <- decodeThread tpid
+                     (sys@(Syscall i o), sysIn, orax) <- readTLS
                      regs <- getRegs
                      setRegs $ regs {orig_rax = orax}
                      case i of
@@ -173,7 +178,7 @@ streamEmu syscalls rawLog coreDumps = do
                      dumpCore
                    Signal 11 -> error "Segfault encountered"
                    x -> liftIO $ print x
-  return self
+  return (return (), self)
 
 streamRewrite tpid z@(SysReq SetSockOpt _) y syscalls = do
   liftIO $ atomically $ do unGetBTChan syscalls (tpid, y)

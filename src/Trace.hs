@@ -16,12 +16,15 @@ import Control.Monad.IO.Class
 import System.Posix.Process
 import Syscall
 
-trace :: (TPid -> Event -> Trace ()) -> (FilePath, [String]) -> IO (MVar ())
-trace handler (exe, args) = do
+-- | Takes in a our definition of a tracing method, and a target, and runs it.
+trace :: (Trace (), TPid -> Event -> Trace ()) -- ^(initializer, handler)
+      -> (FilePath, [String])                  -- ^(elf to load, arguments)
+      -> IO (MVar ())                          -- ^MVar which will be placed
+                                               --  on completion.
+trace (initializer, handler) (exe, args) = do
   finish <- newEmptyMVar
   forkIO $ do th <- traceExec exe args
-              runTrace th $ traceWithHandler handler
+              runTrace th $ do initializer
+                               traceWithHandler handler
               putMVar finish ()
   return finish
-
-wordTrace = rawTracePtr . wordPtrToPtr . fromIntegral
