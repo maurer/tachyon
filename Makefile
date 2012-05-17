@@ -2,6 +2,7 @@ SANDBOX=$(CURDIR)/cabal-dev
 TRACER=$(SANDBOX)/bin/tracer
 COREDIFF=$(SANDBOX)/bin/corediff
 export TRACER
+export COREDIFF
 all: $(TRACER) $(COREDIFF)
 
 .PHONY : init
