@@ -1,6 +1,7 @@
 *.log
 logger.*
 emulate.*
+emulator.*
 *.A
 *.B
 cabal-dev/
