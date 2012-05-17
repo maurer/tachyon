@@ -53,7 +53,9 @@ makeContext prefix rawLog coreDumps = do
                     | otherwise = return ()
   let registerThread t t' = liftIO $ do
          (ttt', ttz') <- takeMVar ttt
-         putMVar ttt $ (Map.insert t t' ttt', Map.insert t' t ttz')
+         if Map.member t ttt'
+            then putMVar ttt (ttt', ttz')
+            else putMVar ttt $ (Map.insert t t' ttt', Map.insert t' t ttz')
   let decodeThread t = liftIO $ do
          (ttt', _) <- readMVar ttt
          return (ttt' Map.! t)
@@ -116,22 +118,27 @@ streamEmu syscalls rawLog coreDumps = do
   let encodeThread = ctxEncTh ctx
   let decodeThread = ctxDecTh ctx
   print "Waiting for first syscall..."
+  zz <- atomically $ readBTChan syscalls
   z@(t0,_) <- atomically $ readBTChan syscalls
   print "Got it!"
   atomically $ unGetBTChan syscalls z
+  atomically $ unGetBTChan syscalls zz
   print "Put it back."
   let self = \tpid e -> do
              let log = ctxLog ctx tpid
              let dumpCore = ctxCore ctx tpid
              let readTLS = ctxReadTLS ctx tpid
              let writeTLS = ctxWriteTLS ctx tpid
+             registerThread tpid t0
              case e of
                    Split newtid -> do --Assume that a clone is being
                                       --processed
+                     error "Split unexpected"
                      z@((Syscall _ (SysRes x _)), _, _) <- readTLS
                      registerThread newtid (buildTPid x)
                      ctxWriteTLS ctx (buildTPid x) z
                    PreSyscall -> do
+                     
                      sysIn <- readInput
                      log $ formatIn sysIn
                      t <- decodeThread tpid

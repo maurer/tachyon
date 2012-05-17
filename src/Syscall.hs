@@ -10,7 +10,8 @@ import qualified Data.ByteString as BS
 data SysReq = SysReq SyscallID [(Lookup, Datum)] deriving (Show, Eq)
 data SysRes = SysRes Word64 [(Lookup, Datum)] deriving Show
 
-data Syscall = Syscall SysReq SysRes deriving Show
+data Syscall = Syscall SysReq SysRes
+             | ATRand (Word64, Word64) deriving Show -- TODO ATRand doesn't belong here, this is a mistake, but I want to avoid some stuff for now.
 
 data SysSig = SysSig Type [Type] deriving Show
 
@@ -222,11 +223,20 @@ instance Binary SyscallID where
    get = fmap toEnum get
 
 instance Binary Syscall where
-   put (Syscall p o) = do put p
+   put (Syscall p o) = do put (0 :: Word8)
+                          put p
                           put o
-   get = do p <- get
-            o <- get
-            return $ Syscall p o
+   put (ATRand (a, b)) = do put (1 :: Word8)
+                            put a
+                            put b
+   get = do m <- get
+            case (m :: Word8) of
+              0 -> do p <- get
+                      o <- get
+                      return $ Syscall p o
+              1 -> do a <- get
+                      b <- get
+                      return $ ATRand (a, b)
 
 instance Binary SysReq where
   put (SysReq n x) = do put n
