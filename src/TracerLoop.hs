@@ -15,6 +15,7 @@ import Data.Binary
 import Data.Word
 import Foreign.Ptr
 import Control.Concurrent.MVar
+import ATRandom
 
 logFormat xs = (concatMap (\x -> "[" ++ x ++ "]") (init xs)) ++ ": " ++ (last xs) ++ "\n"
 
@@ -103,7 +104,7 @@ loggerHandler syscalls ctx tpid e = do
 makeLogger :: BTChan (TPid, Syscall) -> (String -> IO ()) -> Bool -> IO (Trace (), TPid -> Event -> Trace ())
 makeLogger syscalls rawLog coreDumps = do
   ctx <- makeContext "logger" rawLog coreDumps
-  return (return (), loggerHandler syscalls ctx)
+  return (sendATRandom syscalls, loggerHandler syscalls ctx)
 
 ignoreit _ _ = return ()
 --sysc = id
@@ -178,7 +179,7 @@ streamEmu syscalls rawLog coreDumps = do
                      dumpCore
                    Signal 11 -> error "Segfault encountered"
                    x -> liftIO $ print x
-  return (return (), self)
+  return (recvATRandom syscalls, self)
 
 streamRewrite tpid z@(SysReq SetSockOpt _) y syscalls = do
   liftIO $ atomically $ do unGetBTChan syscalls (tpid, y)

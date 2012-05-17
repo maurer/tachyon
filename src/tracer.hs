@@ -32,6 +32,7 @@ main = do
                Just h  -> \str -> do takeMVar logLock
                                      hPutStr h str
                                      putMVar logLock ()
+   
    syscalls <- newBTChanIO 20
    case target of
       Record safe logFile -> do logger   <- makeLogger syscalls log (jDump job)

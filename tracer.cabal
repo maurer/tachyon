@@ -13,7 +13,7 @@ Executable corediff
 Executable tracer
   Main-is: tracer.hs
   Hs-Source-Dirs: src
-  Other-Modules: Syscall, Args, Encoding, SyscallTable, Trace, TracerLoop, TypedSyscalls, Util
+  Other-Modules: Syscall, Args, Encoding, SyscallTable, Trace, TracerLoop, TypedSyscalls, Util, ATRandom
   Build-depends: base, binary, trace, containers, bytestring, unix, split, transformers, stm, process, bounded-tchan
   Extensions: ScopedTypeVariables
 --  GHC-options: -auto-all -rtsopts
