@@ -7,11 +7,16 @@ import System.Environment
 import Numeric
 import Data.List
 import Foreign.Ptr
+import System.Exit
+
 main = do
   coreNames <- getArgs
   cores <- mapM ((fmap toList) . decodeFile) coreNames
   diffs <- mapM mrdiff $ transpose cores
   mapM_ putStrLn diffs
+  if and $ map (== "Zone matched") diffs
+     then exitWith ExitSuccess
+     else exitWith (ExitFailure 1)
 
 instance Binary WordPtr where
   get = fmap fromIntegral $ (get :: Get Word64)
