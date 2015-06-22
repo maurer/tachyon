@@ -1,11 +1,12 @@
-Name:                tracer
+Name:                tachyon
 Version:             0.1
-License:             AllRightsReserved
+License:             MIT
 Author:              Matthew Maurer
 Maintainer:          maurer@matthewmaurer.org
 Category:            System
 Build-type:          Simple
 Cabal-version:       >=1.2
+
 Executable corediff
   Main-is: corediff.hs
   Hs-Source-Dirs: src
