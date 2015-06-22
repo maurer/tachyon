@@ -115,6 +115,7 @@ data SyscallID = Dup2
                | SendFile
                | Shutdown
                | FAdvise64
+               | ReadLink
                 deriving (Ord, Show, Eq, Read, Enum)
 
 syscallReg = orig_rax
@@ -177,6 +178,7 @@ syscallID regs = case syscallReg regs of
    80  -> ChDir
    87  -> Unlink
    83  -> MkDir
+   89  -> ReadLink
    95  -> UMask
    96  -> GetTimeOfDay
    97  -> GetRLimit

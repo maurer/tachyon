@@ -117,7 +117,8 @@ epollData = Small 8
 epollEvent = Struct [uint32, epollData]
 pid = Small 4
 syscallTable :: Map.Map SyscallID SysSig
-syscallTable = Map.fromList [(EPollWait, SysSig int [int, Ptr Out epollEvent (Lookup (Arg 2)) UT, int, int]),
+syscallTable = Map.fromList [(ReadLink, SysSig ssize [string, Ptr Out void (Lookup (Arg 2)) NT, size]), 
+                             (EPollWait, SysSig int [int, Ptr Out epollEvent (Lookup (Arg 2)) UT, int, int]),
                              (NanoSleep, SysSig int [ptr In timespec, ptr Out timespec]),
                              (SetGID, SysSig int [int]),
                              (Wait4, SysSig int [pid, ptr Out int, int, ptr Out rUsage]),
